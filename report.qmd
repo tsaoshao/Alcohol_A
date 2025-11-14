@@ -1,13 +1,39 @@
-# tidying: Comment.csv, Post.csv, Like.csv, Login.csv
+---
+title: "report"
+format: html
+editor: visual
+---
+
+# Alcohol Data Tidying Report
+
+## Introduction
+
+... This is a student project of data tidying in R studio.
+
+```{r}
 library(tidyverse)
-library(lubridate)
 
-# data importing
-comment <- read_csv("~/Desktop/Alcohol_A/AlcoholData/Comment.csv")
-like <- read_csv("~/Desktop/Alcohol_A/AlcoholData/Like.csv")
-login <- read_csv("~/Desktop/Alcohol_A/AlcoholData/Login.csv")
-post <- read_csv("~/Desktop/Alcohol_A/AlcoholData/Post.csv")
+comment <- read_csv("Comment.csv")
+day_data <- read_csv("DayData.csv")
+like <- read_csv("Like.csv")
+login <- read_csv("Login.csv")
+post <- read_csv("Post.csv")
+pre_survey <- read_csv("Presurvey.csv")
+user <- read_csv("User.csv")
+week_data <- read_csv("WeekData.csv")
+```
 
+## Principle 1
+
+### Presurvey.csv
+
+This file...
+
+### Post.csv
+
+Principle 1 was applied to split post attributes and viewer attributes into two different tibbles. Variable names were transformed into lowercases with underscores to pave way for further analysis.
+
+```{r}
 # splitting post and view information
 post_tbl <- post |> 
   select(
@@ -53,7 +79,24 @@ post_tbl |>
 view_tbl |> 
   count(post_id, viewer_id) |> 
   filter(n > 1)
+```
 
+## Principle 2
 
-post |> 
-  mutate(parsed_time = ymd_hms(SyncTime, quiet = TRUE))
+### Presurvey.csv
+
+### Post.csv
+
+## Principle 3
+
+### Presurvey.csv
+
+### Post.csv
+
+## Principle 4
+
+### Presurvey.csv
+
+### Post.csv
+
+## Description
