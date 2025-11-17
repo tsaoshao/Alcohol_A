@@ -1,102 +1,189 @@
 ---
-title: "report"
+title: "Alcohol Data Tidying Report"
 format: html
 editor: visual
 ---
 
-# Alcohol Data Tidying Report
+# 1 Introduction
 
-## Introduction
+In this report, we are going to present the process and rationale of our data tidying process of the data set `Alcohol`, in terms of how the four data tidy principles were applied, how the relations and primary keys of each tibble were found and checked, and the way we joined the tibbles. All data tidying and report writing were done in R studio version 2025.09.2+418.
 
-... This is a student project of data tidying in R studio.
+# 2 Data Tidying
+
+## 2.1 Data importing
+
+All eight data sets were imported with `read_csv` under `tidyverse` and made use of. Each of them was renamed to lowercase with underscores for code clarity.
 
 ```{r}
-library(tidyverse)
+#| label: data-importing
 
-comment <- read_csv("Comment.csv")
-day_data <- read_csv("DayData.csv")
-like <- read_csv("Like.csv")
-login <- read_csv("Login.csv")
-post <- read_csv("Post.csv")
-pre_survey <- read_csv("Presurvey.csv")
-user <- read_csv("User.csv")
-week_data <- read_csv("WeekData.csv")
+# Launch all the necessary packages for data tidying
+library(tidyverse)
+library(lubridate)
+library(snakecase)
+
+# Import and rename data sets for clarity
+comment <- read_csv("AlcoholData/Comment.csv")
+day_data <- read_csv("AlcoholData/DayData.csv")
+like <- read_csv("AlcoholData/Like.csv")
+login <- read_csv("AlcoholData/Login.csv")
+post <- read_csv("AlcoholData/Post.csv")
+pre_survey <- read_csv("AlcoholData/Presurvey.csv")
+user <- read_csv("AlcoholData/User.csv")
+week_data <- read_csv("AlcoholData/WeekData.csv")
 ```
 
-## Principle 1
+## 2.2 Principle 1: Each type of case must have its own tibble
 
-### Presurvey.csv
+To prepare data for tidying, we used `rename_with()` and `snakecase` package to convert each variable name into lowercase with underscores in each data set.
 
-This file...
+To decide if principle 1 was violated in each data set, we used `group_by()`, `summarise()` and `count()` to identify type of cases in each raw data set,
 
-### Post.csv
+### 2.2.1 Comment.csv
 
-Principle 1 was applied to split post attributes and viewer attributes into two different tibbles. Variable names were transformed into lowercases with underscores to pave way for further analysis.
+For this file
 
 ```{r}
-# splitting post and view information
-post_tbl <- post |> 
-  select(
-    post_id = PostID,
-    Fakepost : Facebookpost,
-    post_title = PostTitle,
-    post_header = PostHeader,
-    post_text1 = PostText1,
-    post_text2 = PostText2,
-    post_time = PostTime,
-    post_creator = PostCreator,
-    post_comments = PostComments,
-    post_likes = PostLikes,
-    post_views = PostViews
-  ) |> 
-  distinct(post_id, .keep_all = TRUE) |> 
-  # numeric counts
+comment <- comment |> 
+  rename_with(~ snakecase::to_snake_case(.x))
+
+comment |> 
+  group_by(post_id, commenter_id) |> 
+  summarise(n_distinct = n_distinct(comment_time), .groups = "drop") |> 
+  count(n_distinct)
+```
+
+### 2.2.2 DayData.csv
+
+### 2.2.3 Like.csv
+
+```{r}
+like <- like |> 
+  rename_with(~ snakecase::to_snake_case(.x))|> 
+  mutate(liker_id = as.character(liker_id))
+
+like |> 
+  distinct(post_id, liker_id, .keep_all = TRUE)
+```
+
+### 2.2.4 Login.csv
+
+```{r}
+login <- login |> 
+  rename_with(~ snakecase::to_snake_case(.x)) |> 
+  mutate(user_id = as.character(user_id))
+```
+
+### 2.2.5 Post.csv
+
+Principle 1 was applied to split post attributes and viewer attributes into two different tibbles. To make way for further analysis, variable names were transformed into lowercase with underscores. `post_id` and `viewer_id` were converted to character because they are only categorical variables without numerical meaning. `post_comments`, `post_likes` and `post_views` were then converted from `double` to `integer`, Time-sensitive variables like `post_time` and `sync_time` were converted from `character` to `datetime`, in order to be more precise in terms of definition.
+
+```{r}
+# Renaming variables by removing uppercase and adding underscores
+post <- post |>
+  rename_with(~ snakecase::to_snake_case(.x))|> 
   mutate(
+    # Convert post ID and viewer ID to character to avoid accidental numeric behaviour
+    post_id = as.character(post_id),
+    viewer_id = as.character(viewer_id),
+     # Convert from double to integer type
     post_comments = as.integer(post_comments),
     post_likes = as.integer(post_likes),
     post_views = as.integer(post_views),
-    # parse datetime if post_time exists (try multiple formats)
-    post_time = parse_date_time(post_time, orders = c("Ymd HMS", "Y-m-d H:M:S", "d/m/Y H:M:S", "Y-m-d", "ymd HMS"))
+    # Convert from double to datetime type
+    post_time = parse_date_time(post_time, orders = c("Ymd HMS", "Y-m-d H:M:S", "d/m/Y H:M:S", "Y-m-d", "ymd HMS")),
+    sync_time = parse_date_time(sync_time, orders = c("Ymd HMS", "Y-m-d H:M:S", "d/m/Y H:M:S", "Y-m-d", "ymd HMS"))
   )
+```
 
-view_tbl <- post |> 
-  select(post_id = PostID, 
-         viewer_id = ViewerID, 
-         SyncTime,
-  ) |> 
-  filter(!is.na(viewer_id)) |> 
-  mutate(
-    viewer_id = as.character(viewer_id),
-    SyncTime = parse_date_time(SyncTime, orders = c("Ymd HMS", "Y-m-d H:M:S", "d/m/Y H:M:S"))
-  ) |> 
+We checked for the possible type of cases in `post.csv`, after a few trials, we found `viewer_id` does not belong to the type of case of "post".
+
+```{r}
+# For each value of the selected type of case...
+post |> 
+  group_by(post_id) |>
+  # ... calculate the number of distinct values of the selected variable.
+  summarise(n_distinct = n_distinct(viewer_id), .groups = "drop") |>
+  # Count number of distinct variable values per type of case: 
+  # If 1, then variable has unique value for each case.
+  count(n_distinct)
+```
+
+The raw data set `Post.csv` was then split into two separate tibbles based on the type of cases. `post_sub_1` included information about each post, `post_sub_2` contained only two variables: `post_id` and `viwer_id`. `distinct()` was used on the primary key(s) to eliminate repetitions, as well as further clarity. `post_sub_1` was thus reduced to a parsimonious data set of 547 rows from 91031 rows.
+
+```{r}
+# Splitting post and view information into 2 separate tibbles
+# post_sub_1: post information, post_sub_2: viewer information
+post_sub_1 <- post |> 
+  # Select only post-level variables
+  select(post_id : sync_time) |> 
+  # Transform tidied post_sub_1 to make it clearer
+  distinct(post_id, .keep_all = TRUE) 
+
+post_sub_2 <- post |> 
+  select(post_id, viewer_id) |> 
+  # Ensure unique (post_id, viewer_id) rows
   distinct(post_id, viewer_id, .keep_all = TRUE)
+```
 
-# checking primary key
-post_tbl |> 
+### 2.2.6 Presurvey.csv
+
+This file...
+
+### 2.2.7 User.csv
+
+### 2.2.8 WeekData.csv
+
+## 2.3 Principle 2: Each observation must have its own row
+
+## 2.4 Principle 3: Each variable must have its own column
+
+## 2.5 Principle 4: Each value must have its own cell
+
+# 3 Table relations and primary key checking
+
+## 3.1 Comment.csv
+
+```{r}
+comment |> 
+  count(post_id, comment_time, commenter_id) |> 
+  filter(n > 1)
+```
+
+## 3.3 Like.csv
+
+```{r}
+like |> 
+  count(post_id, liker_id) |> 
+  filter(n > 1)
+```
+
+## 3.4 Login.csv
+
+```{r}
+login |> 
+  count(user_id, user_login_time) |> 
+  filter(n > 1)
+```
+
+## 3.5 Post.csv
+
+### 3.5.1 post_sub_1
+
+```{r}
+post_sub_1 |> 
   count(post_id) |> 
   filter(n > 1)
+```
 
-view_tbl |> 
+### 3.5.2 post_sub_2
+
+```{r}
+post_sub_2 |> 
   count(post_id, viewer_id) |> 
   filter(n > 1)
 ```
 
-## Principle 2
+# 4 Table Joining
 
-### Presurvey.csv
-
-### Post.csv
-
-## Principle 3
-
-### Presurvey.csv
-
-### Post.csv
-
-## Principle 4
-
-### Presurvey.csv
-
-### Post.csv
-
-## Description
+# 5 Description
