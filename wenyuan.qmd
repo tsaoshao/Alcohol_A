@@ -14,21 +14,22 @@ In this report, we are going to present the process and rationale of our data ti
 
 All eight data sets were imported with `read_csv` under `tidyverse` and made use of.
 
-```{r results='hide'}
+```{r, results='hide', message=FALSE, warning=FALSE}
 #| label: data-importing
 
-# tidyverse for data wrangling
+# tidyverse for data wrangling; DT for table insertion
 library(tidyverse)
+library(DT)
 
 # Import and rename data sets for clarity
-comment <- read_csv("AlcoholData/Comment.csv")
-day_data <- read_csv("AlcoholData/DayData.csv")
-like <- read_csv("AlcoholData/Like.csv")
-login <- read_csv("AlcoholData/Login.csv")
-post <- read_csv("AlcoholData/Post.csv")
-pre_survey <- read_csv("AlcoholData/Presurvey.csv")
-user <- read_csv("AlcoholData/User.csv")
-week_data <- read_csv("AlcoholData/WeekData.csv")
+Comment <- read_csv("AlcoholData/Comment.csv")
+DayData <- read_csv("AlcoholData/DayData.csv")
+Like <- read_csv("AlcoholData/Like.csv")
+Login <- read_csv("AlcoholData/Login.csv")
+Post <- read_csv("AlcoholData/Post.csv")
+PreSurvey <- read_csv("AlcoholData/Presurvey.csv")
+User <- read_csv("AlcoholData/User.csv")
+WeekData <- read_csv("AlcoholData/WeekData.csv")
 ```
 
 ## 2.2 Principle 1: Each type of case must have its own tibble
@@ -43,39 +44,46 @@ Principle 1 was not violated in this data set as all variables belong to the sam
 
 ```{r}
 # Type of case check
-comment |> 
+Comment |> 
   group_by(PostID, CommentTime, CommenterID) |> 
   summarise(n_distinct = n_distinct(CommentContent), .groups = "drop") |> 
   count(n_distinct)
 
 # Check for primary key and duplicates
-comment_dupes <- comment |>
+Comment_dupes <- Comment |>
   count(PostID, CommenterID, CommentTime) |>
   filter(n > 1)
 
 # View duplicate comments
-comment |> semi_join(comment_dupes, by = c("PostID", "CommenterID", "CommentTime"))
+Comment |> semi_join(Comment_dupes, by = c("PostID", "CommenterID", "CommentTime"))
 ```
 
 After checking for duplicates, we checked for missing values in the primary key columns. Rows with missing keys cannot be reliably identified or linked across tables, and should be addressed during data cleaning.
 
 ```{r}
 # Check for missing values in primary key columns
-comment |> 
+Comment |> 
   filter(is.na(PostID) | is.na(CommenterID) | is.na(CommentTime))
 ```
 
-As no missing value showed up, we proceeded with the cleaning process.
+As no missing value showed up, we proceeded without removals.
 
 To ensure that each comment event appears only once, we removed duplicates and retain all available information for the first occurrence using `.keep_all = TRUE` in `distinct()`. This preserves additional columns associated with each comment, which may be required elsewhere in analysis.
 
 ```{r}
-# retain all columns from the first occurrence and preserve other information in the tibble.
-comment_tidy <- comment |>
+# Retain all columns from the first occurrence to preserve extra information for each unique comment event.
+Comment_tidy <- Comment |>
   distinct(PostID, CommenterID, CommentTime, .keep_all = TRUE)
 ```
 
 Each row is now an individual comment action (by a commenter, on a post, at a time).
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(Comment_tidy)
+)
+```
 
 ### 2.2.2 DayData.csv
 
@@ -85,84 +93,251 @@ The type of case in `Like.csv` is a unique like event, defined by (`PostID`, `Li
 
 ```{r}
 # Check for duplicates
-like_dupes <- like |>
+Like_dupes <- Like |>
   count(PostID, LikerID) |>
   filter(n > 1)
 
 # View duplicate likers
-like |> semi_join(like_dupes, by = c("PostID", "LikerID"))
+Like |> semi_join(Like_dupes, by = c("PostID", "LikerID"))
 
 # Check for missing values in primary key columns
-like |> 
+Like |> 
   filter(is.na(PostID) | is.na(LikerID))
 ```
 
-We removed any duplicate rows so each row corresponds to a unique like event.
+No missing values were detected. We removed any duplicate rows so each row corresponds to a unique like event.
 
 ```{r}
 # .keep_all ensures other information is preserved.
-like_tidy <- like |>
+Like_tidy <- Like |>
   distinct(PostID, LikerID, .keep_all = TRUE)
 ```
 
 Each row now is a unique user liking a post.
 
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(Like_tidy)
+)
+```
+
 ### 2.2.4 Login.csv
 
-In this data set, the case type is a login event, defined by `UserID` and `User_LoginTime`. Principle 1 was not violated here, but we checked for duplicate login events per user and missing values to prevent  analytic errors.
+In this data set, the case type is a login event, defined by `UserID` and `User_LoginTime`. Principle 1 was not violated here, but we checked for duplicate login events per user and missing values to prevent analytic errors.
 
 ```{r}
 # Check for duplicates
-login_dupes <- login |>
+Login_dupes <- Login |>
   count(UserID, User_LoginTime) |>
   filter(n > 1)
 
 # Check for missing values in primary key columns
-login |> 
+Login |> 
   filter(is.na(UserID) | is.na(User_LoginTime))
 ```
 
 No duplicated rows or missing values were found. Each row is a single login event, representing a login by a user at a specific time.
 
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(Login)
+)
+```
+
 ### 2.2.5 Post.csv
 
-We checked for the possible type of cases in `Post.csv`.`ViewerID` was found not belong to the type of case of "post", which means principle 1 was violated. In the missing value check, we found a missing value in the `ViewerID` column. To keep most meaningful information in that observation, we only removed the missing value when splitting a new tibble for `PostID` /* `ViewerID`.
+We checked for the possible type of cases in `Post.csv`. `ViewerID` was found not belong to the type of case of "post", which means principle 1 was violated. In the missing value check, we found a missing value in the `ViewerID` column. To keep most meaningful information in that observation, we only removed the missing `ViewerID` when creating a new tibble for `PostID` \* `ViewerID`.
 
 ```{r}
 # Check for violation (multiple views per post)
-post |> 
+Post |> 
   group_by(PostID) |>
   summarise(n_distinct = n_distinct(ViewerID), .groups = "drop") |>
   count(n_distinct)
 
 # Check for missing values in primary key columns
-post |> 
+Post |> 
   filter(is.na(PostID) | is.na(ViewerID))
 ```
 
-The raw data set `Post.csv` was then split into two separate tibbles based on the type of cases. `post_sub1` included information about each post, `post_sub2` depicted how each post was viewed by a unique viewer, containing only two variables: `PostID` and `ViewerID`. `distinct()` was used on the primary key(s) to remove duplicates. `post_sub1` was thus reduced to a parsimonious data set of 547 rows from 91031 rows.
+The raw data set `Post.csv` was then split into two separate tibbles based on the type of cases. `Post_sub1` included information about each post, `Post_sub2` depicted how each post was viewed by a unique viewer, containing only two variables: `PostID` and `ViewerID`. `distinct()` was used on the primary key(s) to remove duplicates. `Post_sub1` was thus reduced to a parsimonious data set of 547 rows from 91031 rows.
 
-```{r}
+```{r results='hide'}
 # Splitting post and view information into 2 separate tibbles
 # Adjust to select post-only variables
 # Each row: one post
-post_sub1 <- post |> 
+Post_sub1 <- Post |> 
   select(PostID : SyncTime) |> 
   distinct(PostID, .keep_all = TRUE) 
+```
 
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(
+  Post_sub1,
+  options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+      )
+    )
+  )
+)
+)
+```
+
+```{r results='hide'}
 # View events
 # Each row: one unique (post, viewer) event
-post_sub2 <- post |> 
+Post_sub2 <- Post |> 
   select(PostID, ViewerID) |> 
   filter(!is.na(ViewerID)) |>
   distinct(PostID, ViewerID, .keep_all = TRUE)
 ```
 
-Now for `post_sub1`, each row is a unique post and its attributes; for `post_sub2`, each row is a unique view event (a user viewing a post).
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(head(Post_sub2, 500), options = list(pageLength = 25))
+)
+```
+
+Now for `Post_sub1`, each row is a unique post and its attributes; for `Post_sub2`, each row is a unique view event (a user viewing a post).
 
 ### 2.2.6 Presurvey.csv
 
-This file...
+According to Principle 1, each type of case should have its own tibble. We first check the primary key to see whether different case types can be detected directly from the raw data. In this dataset, the primary key `UserID` does not reveal any structural differences, so we rely on inspecting the variables themselves. Based on that, we identify two distinct types of cases: group-member information and user-level information. We therefore split the dataset into two tibbles before continuing with the tidying process.
+
+**Check the primary key**
+
+```{r}
+PreSurvey |> 
+  count(UserID) |> 
+  filter(n > 1)
+```
+
+By checking the primary key, we found that `UserID 470` submitted two fully completed but inconsistent `PreSurvey` entries.
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(
+    PreSurvey |> 
+      filter(UserID == 470)
+  )
+)
+```
+
+**Exclude UserID 470 from the dataset**
+
+```{r results='hide'}
+PreSurvey <- PreSurvey |> 
+  filter(UserID != 470)
+```
+
+Since we could not determine which response was valid, and keeping both would double-count this user, we excluded this user from the dataset.
+
+**Check the primary key again**
+
+```{r results='hide'}
+PreSurvey |> 
+  count(UserID) |> 
+  filter(n > 1)
+```
+
+After removing the duplicate user, we check the primary key again. Now, each `UserID` appears only once, which shows that `UserID` functions as the primary key for the `PreSurvey` tibble at this stage.
+
+**Check missing values in primary key**
+
+```{r results='hide'}
+PreSurvey |> 
+  filter(is.na(UserID))
+```
+
+This step checks whether any rows have a missing `UserID`. A primary key cannot contain missing values, so this helps confirm that all cases are properly identified before we continue with further tidying.
+
+::: callout-warning
+## Important
+
+Although checking the primary key in the raw data does not reveal different types of cases, applying Principle 2 later will change the row structure through pivoting, which in turn alters the primary key and exposes distinct case types. To keep the workflow cleaner and avoid unnecessary complexity after pivoting, we identify these case types in advance and split the dataset before further tidying.
+:::
+
+**Select related columns based on type of case (1)**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey |>  select(
+  UserID,
+  starts_with("GroupMember_")
+)
+```
+
+Since the primary key didn’t tell us anything about different case types, we looked directly at the variables themselves. From their structure, we could clearly see that the dataset mixes group-member information with user-level information. Based on this distinction, and following Principle 1, we separated the group-member variables into `PreSurvey_sub1`.
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(PreSurvey_sub1,
+            options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+      )
+    )
+  )
+)
+)
+```
+
+**Select related columns based on type of case (2)**
+
+```{r results='hide'}
+PreSurvey_sub2 <- PreSurvey |> select(
+  !starts_with("GroupMember_")
+)
+```
+
+After separating out the group-member variables, the remaining columns represent user-level information. We collect these into `PreSurvey_sub2`, which forms the user-level tibble for the rest of the tidying steps.
+
+```{r echo=FALSE}
+# Fix UTF-8 issue
+PreSurvey_sub2 <- PreSurvey_sub2 |> 
+  mutate(across(where(is.character), ~iconv(.x, from = "UTF-8", to = "UTF-8", sub = "")))
+
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(PreSurvey_sub2,
+            options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+      )
+    )
+  )
+)
+)
+```
+
+::: callout-note
+Since both resulting tibbles still keep `UserID` as the primary key, we do not repeat the duplicate or missing-value checks here.
+:::
 
 ### 2.2.7 User.csv
 
@@ -170,16 +345,268 @@ This file...
 
 ## 2.3 Principle 2: Each observation must have its own row
 
+According to Principle 2, each observation should appear in its own row. In the `PreSurvey_sub1` tibble, a single row still contained multiple `GroupMember\_` responses from the same user, so several observations were packed together. To address this, we used `pivot_longer()` to pull these member-level variables out into separate rows. After pivoting, each row represents one clear `UserID`\*`Column` observation. We then looked at the new primary key `UserID`\*`Column` to make sure there were no duplicates or missing values.
+
+**Pivot GroupMember\_ columns to long format**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  pivot_longer(
+    cols = -UserID,
+    names_to  = "Column",
+    values_to = "Value"
+  )
+```
+
+This step reshapes all `GroupMember\_` variables into a long format. Each original column is turned into a row so that every member-level response is listed separately rather than being packed inside a single wide row.
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(
+    head(PreSurvey_sub1, 50), options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+      )
+    )
+  )
+)
+)
+```
+
+**Check the primary key**
+
+```{r results='hide'}
+PreSurvey_sub1 |> 
+  count(UserID, Column) |> 
+  filter(n > 1)
+```
+
+This step checks whether the primary key `UserID`\*`Column` appears more than once after pivoting. Since these two fields together form the new primary key in the long table, this check helps confirm that the reshaped tibble does not contain duplicate observations.
+
+**Check missing values in primary key**
+
+```{r results='hide'}
+PreSurvey_sub1 |>
+  filter(is.na(UserID) | is.na(Column))
+```
+
+This step checks whether any `UserID`\*`Column` keys are missing, ensuring that every long-format row is a valid observation.
+
 ## 2.4 Principle 3: Each variable must have its own column
 
+According to Principle 3, each variable should have its own column. After pivoting to long format, the `PreSurvey_sub1` tibble still mixed different pieces of information: the `Column` column combined both the member index and the variable name, and the `Value` column combined different type of responses. To resolve this, we split the encoded column names into separate components and pivoted the table wider again. After this, each variable has its own column, and the tibble meets the requirement of Principle 3.
+
+**Split the encoded column names**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  separate_wider_delim(
+    Column,
+    delim = "_",
+    names = c("Prefix", "Member", "Variable"),
+    too_few = "align_start",
+    too_many = "merge"
+  )
+```
+
+This step splits the combined column names into separate parts. We use `separate_wider_delim()` to split `Column` at each underscore, which gives us three components: the prefix `Prefix`, the member index `Member`, and the variable name `Variable`. This prepares the tibble for the next reshaping step.
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(
+    head(PreSurvey_sub1, 50))
+)
+```
+
+**Clean and select variable components**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  mutate(
+    Variable = ifelse(is.na(Variable), "MemberID", Variable),
+    Member   = as.integer(Member)
+  ) |>
+  select(UserID, Member, Variable, Value)
+```
+
+We replace missing variable names with `MemberID` and convert the member index into an integer. Then we keep only the columns needed for the next reshaping step: `UserID`, `Member`, `Variable`, and `Value`.
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(
+    head(PreSurvey_sub1, 50),
+    options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+      )
+    )
+  )
+)
+)
+```
+
+**Reshape the tibble to wide format**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  pivot_wider(
+    id_cols     = c(UserID, Member),
+    names_from  = Variable,
+    values_from = Value
+  ) |>
+  arrange(UserID, Member)
+```
+
+After cleaning the variable components, we reshape the tibble back into a wide format using `pivot_wider()`. This spreads each variable into its own column, with `UserID` and `Member` defining each observation. Finally, we sort the rows for clarity so the structure aligns with Principle 3.
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(PreSurvey_sub1,
+            options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+      )
+    )
+  )
+)
+)
+```
+
+**Check the primary key**
+
+```{r results='hide'}
+PreSurvey_sub1 |> 
+  count(UserID, Member) |> 
+  filter(n > 1)
+```
+
+This checks whether the new primary key `UserID`\*`Member` is unique after reshaping, ensuring that each group-member observation appears only once.
+
+**Check missing values in primary key**
+
+```{r results='hide'}
+PreSurvey_sub1 |> 
+  filter(is.na(UserID) | is.na(Member))
+```
+
+This checks whether any rows in the new tibble are missing either `UserID` or `Member`, since a valid primary key cannot contain NA values.
+
+**Remove empty group-member rows**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  filter(!if_all(-c(UserID, Member), is.na))
+```
+
+These rows contain a valid `UserID` and `Member` index but no actual data for any group-member variables. Since they do not represent meaningful observations, we remove them before continuing.
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(
+    head(PreSurvey_sub1, 50),
+    options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+      )
+    )
+  )
+)
+)
+```
+
 ## 2.5 Principle 4: Each value must have its own cell
+
+According to Principle 4, each cell should contain only one value. In the `PreSurvey_sub2` tibble, the variable `Alc_Freq_Normal` stored both a numeric code and a descriptive label in the same cell, which mixes two pieces of information. To fix this, we separated the numeric part from the text label and converted the code into an integer. After this step, each cell holds only a single value, and the variable structure follows Principle 4.
+
+**Separate code and label in Alc_Freq_Normal**
+
+```{r results='hide'}
+PreSurvey_sub2 <- PreSurvey_sub2 |> 
+  separate_wider_delim(
+    Alc_Freq_Normal,
+    delim = ". ",
+    names = c("AlcFreq_code", "AlcFreq_label"),
+    too_few = "align_start"
+  ) 
+```
+
+This step splits the `Alc_Freq_Normal` column into two fields: the numeric code and the text label. We use `separate_wider_delim()` to detect the “`.`” delimiter and pull the two parts apart, so that each cell contains only one piece of information as required by Principle 4.
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(
+    head(PreSurvey_sub2, 50) |> 
+      select(UserID, AlcFreq_code, AlcFreq_label, everything())
+  )
+)
+```
+
+**Convert the frequency code to an integer**
+
+```{r results='hide'}
+PreSurvey_sub2 <- PreSurvey_sub2 |> 
+  mutate(
+    AlcFreq_code = as.integer(AlcFreq_code)
+  )
+```
+
+This converts the extracted code into a numeric value so it can be used properly in later analyses.
+
+**Check the primary key**
+
+```{r results='hide'}
+PreSurvey_sub2 |> 
+  count(UserID) |> 
+  filter(n > 1)
+```
+
+This check looks for any duplicated `UserID` values in `PreSurvey_sub2`. The filtered result is empty, which means no user appears more than once. In other words, `UserID` remains a valid and unique primary key for this tibble.
+
+**Check missing values in primary key**
+
+```{r results='hide'}
+PreSurvey_sub2 |>
+  filter(is.na(UserID))
+```
+
+This step checks whether any rows in `PreSurvey_sub2` have a missing `UserID`. Since no rows are returned, we confirm that the primary key is fully observed with no missing values.
 
 # 3 Table relations and primary key checking
 
 ## 3.1 Comment.csv
 
 ```{r}
-comment_tidy |> 
+Comment_tidy |> 
   count(PostID, CommentTime, CommenterID) |> 
   filter(n > 1)
 ```
@@ -187,7 +614,7 @@ comment_tidy |>
 ## 3.3 Like.csv
 
 ```{r}
-like_tidy |> 
+Like_tidy |> 
   count(PostID, LikerID) |> 
   filter(n > 1)
 ```
@@ -195,25 +622,25 @@ like_tidy |>
 ## 3.4 Login.csv
 
 ```{r}
-login |> 
+Login |> 
   count(UserID, User_LoginTime) |> 
   filter(n > 1)
 ```
 
 ## 3.5 Post.csv
 
-### 3.5.1 post_sub1
+### 3.5.1 Post_sub1
 
 ```{r}
-post_sub1 |> 
+Post_sub1 |> 
   count(PostID) |> 
   filter(n > 1)
 ```
 
-### 3.5.2 post_sub2
+### 3.5.2 Post_sub2
 
 ```{r}
-post_sub2 |> 
+Post_sub2 |> 
   count(PostID, ViewerID) |> 
   filter(n > 1)
 ```
