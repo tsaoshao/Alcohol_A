@@ -14,7 +14,7 @@ In this report, we are going to present the process and rationale of our data ti
 
 All eight data sets were imported with `read_csv` under `tidyverse` and made use of.
 
-```{r}
+```{r results='hide'}
 #| label: data-importing
 
 # tidyverse for data wrangling
@@ -37,32 +37,42 @@ To decide if principle 1 was violated in each data set, we used `group_by()`, `s
 
 ### 2.2.1 Comment.csv
 
-The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by (`post_id`, `commenter_id`, `comment_time`). We assessed whether there were duplicate rows for the same comment event, and also whether attributes such as `comment_content` vary within the same case (i.e., for the same `post_id`, `commenter_id`, `comment_time`).
+The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by a composite primary key (`PostID`, `CommenterID`, `CommentTime`). We assessed whether there were duplicate rows for the same comment event, and also whether attributes such as `CommentContent` vary within the same case (i.e., for the same `PostID`, `CommenterID`, `CommentTime`).
 
-Principle 1 was not violated in this set as all variables belong to the same type of case.
+Principle 1 was not violated in this data set as all variables belong to the same type of case.
 
 ```{r}
 # Type of case check
 comment |> 
-  group_by(post_id, comment_time, commenter_id) |> 
-  summarise(n_distinct = n_distinct(comment_content), .groups = "drop") |> 
+  group_by(PostID, CommentTime, CommenterID) |> 
+  summarise(n_distinct = n_distinct(CommentContent), .groups = "drop") |> 
   count(n_distinct)
 
-# Check for duplicates
+# Check for primary key and duplicates
 comment_dupes <- comment |>
-  count(post_id, commenter_id, comment_time) |>
+  count(PostID, CommenterID, CommentTime) |>
   filter(n > 1)
 
 # View duplicate comments
-comment |> semi_join(comment_dupes, by = c("post_id", "commenter_id", "comment_time"))
+comment |> semi_join(comment_dupes, by = c("PostID", "CommenterID", "CommentTime"))
 ```
+
+After checking for duplicates, we checked for missing values in the primary key columns. Rows with missing keys cannot be reliably identified or linked across tables, and should be addressed during data cleaning.
+
+```{r}
+# Check for missing values in primary key columns
+comment |> 
+  filter(is.na(PostID) | is.na(CommenterID) | is.na(CommentTime))
+```
+
+As no missing value showed up, we proceeded with the cleaning process.
 
 To ensure that each comment event appears only once, we removed duplicates and retain all available information for the first occurrence using `.keep_all = TRUE` in `distinct()`. This preserves additional columns associated with each comment, which may be required elsewhere in analysis.
 
 ```{r}
-# Use .keep_all = TRUE so that, for each group of duplicated identifiers, we retain all columns from the first occurrence and preserve other information in the tibble.
-comment_tidied <- comment |>
-  distinct(post_id, commenter_id, comment_time, .keep_all = TRUE)
+# retain all columns from the first occurrence and preserve other information in the tibble.
+comment_tidy <- comment |>
+  distinct(PostID, CommenterID, CommentTime, .keep_all = TRUE)
 ```
 
 Each row is now an individual comment action (by a commenter, on a post, at a time).
@@ -71,71 +81,84 @@ Each row is now an individual comment action (by a commenter, on a post, at a ti
 
 ### 2.2.3 Like.csv
 
-The type of case in `Like.csv` is a unique like event, defined by (`post_id`, `liker_id`). It does not violate principle 1 as well, we checked for duplicate (`post_id`, `liker_id`) pairs to ensure data set clarity.
+The type of case in `Like.csv` is a unique like event, defined by (`PostID`, `LikerID`). It does not violate principle 1 as well, we checked for duplicate and missing values in (`PostID`, `LikerID`) pairs to ensure data set clarity.
 
 ```{r}
 # Check for duplicates
 like_dupes <- like |>
-  count(post_id, liker_id) |>
+  count(PostID, LikerID) |>
   filter(n > 1)
 
 # View duplicate likers
-like |> semi_join(like_dupes, by = c("post_id", "liker_id"))
+like |> semi_join(like_dupes, by = c("PostID", "LikerID"))
+
+# Check for missing values in primary key columns
+like |> 
+  filter(is.na(PostID) | is.na(LikerID))
 ```
 
 We removed any duplicate rows so each row corresponds to a unique like event.
 
 ```{r}
 # .keep_all ensures other information is preserved.
-like_tidied <- like |>
-  distinct(post_id, liker_id, .keep_all = TRUE)
+like_tidy <- like |>
+  distinct(PostID, LikerID, .keep_all = TRUE)
 ```
 
 Each row now is a unique user liking a post.
 
 ### 2.2.4 Login.csv
 
-In this data set, the case type is a login event, defined by (`user_id`, `user_login_time`). Principle 1 was not violated here, but we checked for duplicate login events per user to prevent further analytic errors.
+In this data set, the case type is a login event, defined by `UserID` and `User_LoginTime`. Principle 1 was not violated here, but we checked for duplicate login events per user and missing values to prevent  analytic errors.
 
 ```{r}
 # Check for duplicates
 login_dupes <- login |>
-  count(user_id, user_login_time) |>
+  count(UserID, User_LoginTime) |>
   filter(n > 1)
+
+# Check for missing values in primary key columns
+login |> 
+  filter(is.na(UserID) | is.na(User_LoginTime))
 ```
 
-No duplicated rows were found. Each row is a single login event, representing a login by a user at a specific time.
+No duplicated rows or missing values were found. Each row is a single login event, representing a login by a user at a specific time.
 
 ### 2.2.5 Post.csv
 
-We checked for the possible type of cases in `Post.csv`.`viewer_id` was found not belong to the type of case of "post", which means principle 1 was violated.
+We checked for the possible type of cases in `Post.csv`.`ViewerID` was found not belong to the type of case of "post", which means principle 1 was violated. In the missing value check, we found a missing value in the `ViewerID` column. To keep most meaningful information in that observation, we only removed the missing value when splitting a new tibble for `PostID` /* `ViewerID`.
 
 ```{r}
 # Check for violation (multiple views per post)
 post |> 
-  group_by(post_id) |>
-  summarise(n_distinct = n_distinct(viewer_id), .groups = "drop") |>
+  group_by(PostID) |>
+  summarise(n_distinct = n_distinct(ViewerID), .groups = "drop") |>
   count(n_distinct)
+
+# Check for missing values in primary key columns
+post |> 
+  filter(is.na(PostID) | is.na(ViewerID))
 ```
 
-The raw data set `Post.csv` was then split into two separate tibbles based on the type of cases. `post_sub1` included information about each post, `post_sub2` contained only two variables: `post_id` and `viwer_id`. `distinct()` was used on the primary key(s) to remove duplicates. `post_sub1` was thus reduced to a parsimonious data set of 547 rows from 91031 rows.
+The raw data set `Post.csv` was then split into two separate tibbles based on the type of cases. `post_sub1` included information about each post, `post_sub2` depicted how each post was viewed by a unique viewer, containing only two variables: `PostID` and `ViewerID`. `distinct()` was used on the primary key(s) to remove duplicates. `post_sub1` was thus reduced to a parsimonious data set of 547 rows from 91031 rows.
 
 ```{r}
 # Splitting post and view information into 2 separate tibbles
 # Adjust to select post-only variables
 # Each row: one post
 post_sub1 <- post |> 
-  select(post_id : sync_time) |> 
-  distinct(post_id, .keep_all = TRUE) 
+  select(PostID : SyncTime) |> 
+  distinct(PostID, .keep_all = TRUE) 
 
 # View events
 # Each row: one unique (post, viewer) event
 post_sub2 <- post |> 
-  select(post_id, viewer_id) |> 
-  distinct(post_id, viewer_id, .keep_all = TRUE)
+  select(PostID, ViewerID) |> 
+  filter(!is.na(ViewerID)) |>
+  distinct(PostID, ViewerID, .keep_all = TRUE)
 ```
 
-Now for `post_sub1`, each row is a unique post; for `post_sub2`, each row is a unique view event (a user viewing a post).
+Now for `post_sub1`, each row is a unique post and its attributes; for `post_sub2`, each row is a unique view event (a user viewing a post).
 
 ### 2.2.6 Presurvey.csv
 
@@ -156,16 +179,16 @@ This file...
 ## 3.1 Comment.csv
 
 ```{r}
-comment_tidied |> 
-  count(post_id, comment_time, commenter_id) |> 
+comment_tidy |> 
+  count(PostID, CommentTime, CommenterID) |> 
   filter(n > 1)
 ```
 
 ## 3.3 Like.csv
 
 ```{r}
-like_tidied |> 
-  count(post_id, liker_id) |> 
+like_tidy |> 
+  count(PostID, LikerID) |> 
   filter(n > 1)
 ```
 
@@ -173,7 +196,7 @@ like_tidied |>
 
 ```{r}
 login |> 
-  count(user_id, user_login_time) |> 
+  count(UserID, User_LoginTime) |> 
   filter(n > 1)
 ```
 
@@ -183,7 +206,7 @@ login |>
 
 ```{r}
 post_sub1 |> 
-  count(post_id) |> 
+  count(PostID) |> 
   filter(n > 1)
 ```
 
@@ -191,7 +214,7 @@ post_sub1 |>
 
 ```{r}
 post_sub2 |> 
-  count(post_id, viewer_id) |> 
+  count(PostID, ViewerID) |> 
   filter(n > 1)
 ```
 
