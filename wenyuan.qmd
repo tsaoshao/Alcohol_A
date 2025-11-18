@@ -12,7 +12,7 @@ In this report, we are going to present the process and rationale of our data ti
 
 ## 2.1 Data Importing and Cleaning
 
-All eight data sets were imported with `read_csv` under `tidyverse` and made use of. Each of them was renamed to lowercase with underscores for code clarity.
+All eight data sets were imported with `read_csv` under `tidyverse` and made use of.
 
 ```{r}
 #| label: data-importing
@@ -248,7 +248,7 @@ login |>
 
 ## 3.5 Post.csv
 
-### 3.5.1 post_sub_1
+### 3.5.1 post_sub1
 
 ```{r}
 post_sub1 |> 
@@ -256,7 +256,7 @@ post_sub1 |>
   filter(n > 1)
 ```
 
-### 3.5.2 post_sub_2
+### 3.5.2 post_sub2
 
 ```{r}
 post_sub2 |> 
