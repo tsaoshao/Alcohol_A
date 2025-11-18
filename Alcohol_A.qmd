@@ -6,7 +6,7 @@ editor: visual
 
 # 1 Introduction
 
-In this report, we are going to present the process and rationale of our data tidying process of the data set `AlcoholData`, in terms of how the four data tidy principles were applied, how the relations and primary keys of each tibble were found and checked, and the way we joined the tibbles. All data tidying and report writing were done in R studio version 2025.09.2+418.
+In this report, we are going to present the process and rationale of our data tidying process of the data set `AlcoholData`, in terms of how the four data tidy principles were applied, how the relations and primary keys of each tibble were found and checked, and the way we joined the tidied tibbles. All data tidying and report writing were done in R studio version 2025.09.2+418.
 
 # 2 Data Tidying
 
@@ -47,7 +47,12 @@ comment <- comment |>
 
 day_data <- day_data |> 
   clean_names() |> 
-  mutate()
+  mutate(
+    user_id = as.character(user_id)
+    # Add more type conversions here as needed, e.g.:
+    # day_num = as.integer(day_num),
+    # total_drinks = as.numeric(total_drinks),
+  )
 
 like <- like |> 
   clean_names() |> 
@@ -60,6 +65,9 @@ login <- login |>
   clean_names() |> 
   mutate(user_id = as.character(user_id))
 
+# Convert post ID and viewer ID to character to avoid accidental numeric behaviour.
+# Convert from double to integer type.
+# Convert from double to datetime type.
 post <- post |>
   clean_names()|>
   mutate(
@@ -69,6 +77,27 @@ post <- post |>
     post_likes = as.integer(post_likes),
     post_views = as.integer(post_views)
   )
+
+pre_survey <- pre_survey |>
+  clean_names() |>
+  mutate(
+    user_id = as.character(user_id)
+    # TODO: Add additional type conversions for survey variables as needed
+  )
+
+user <- user |>
+  clean_names() |>
+  mutate(
+    user_id = as.character(user_id)
+    # TODO: Add further type conversions, e.g. age = as.integer(age), gender = as.character(gender), etc.
+  )
+
+week_data <- week_data |>
+  clean_names() |>
+  mutate(
+    user_id = as.character(user_id)
+    # TODO: Add more, e.g. week_num = as.integer(week_num), total_drinks = as.numeric(total_drinks), etc.
+  )
 ```
 
 ## 2.2 Principle 1: Each type of case must have its own tibble
@@ -77,68 +106,118 @@ To decide if principle 1 was violated in each data set, we used `group_by()`, `s
 
 ### 2.2.1 Comment.csv
 
-For this file
+The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by (`post_id`, `commenter_id`, `comment_time`). We counted (`post_id`, `commenter_id`, `comment_time`) to check for duplicate rows, which would not violate Principle 1, but multiple observations for a case would influence the clarity.
 
 ```{r}
+# Type of case check
 comment |> 
-  group_by(post_id, commenter_id) |> 
-  summarise(n_distinct = n_distinct(comment_time), .groups = "drop") |> 
+  group_by(post_id, comment_time, commenter_id) |> 
+  summarise(n_distinct = n_distinct(post_id, comment_time, commenter_id, comment_content), .groups = "drop") |> 
   count(n_distinct)
+
+# Check for duplicates
+comment_dupes <- comment |>
+  count(post_id, commenter_id, comment_time) |>
+  filter(n > 1)
+
+# View duplicate comments
+comment |> semi_join(comment_dupes, by = c("post_id", "commenter_id", "comment_time"))
 ```
+
+Duplicate rows were found, they should be removed so each row represents a unique comment event.
+
+```{r}
+# Use .keep_all = TRUE so that, for each group of duplicated identifiers, we retain all columns from the first occurrence and preserve other information in the tibble.
+comment_tidied <- comment |>
+  distinct(post_id, commenter_id, comment_time, .keep_all = TRUE)
+```
+
+Each row is now an individual comment action (by a commenter, on a post, at a time).
 
 ### 2.2.2 DayData.csv
 
 ### 2.2.3 Like.csv
 
+The type of case in `Like.csv` is a unique like event, defined by (`post_id`, `liker_id`). It does not violate principe 1 as well, we check for duplicate (`post_id`, `liker_id`) pairs to ensure data set clarity.
+
 ```{r}
+# Type of case check
 like |> 
+  group_by(post_id, liker_id) |> 
+  summarise(n_distinct = n_distinct(post_id, liker_id), .groups = "drop") |> 
+  count(n_distinct)
+
+# Check for duplicates
+like_dupes <- like |>
+  count(post_id, liker_id) |>
+  filter(n > 1)
+
+# View duplicate likers
+like |> semi_join(like_dupes, by = c("post_id", "liker_id"))
+```
+
+We removed any duplicate rows so each row corresponds to a unique like event.
+
+```{r}
+# .keep_all ensures other information is preserved.
+like_tidied <- like |>
   distinct(post_id, liker_id, .keep_all = TRUE)
 ```
 
+Each row now is a unique user liking a post.
+
 ### 2.2.4 Login.csv
 
-```{r}
+In this data set, the case type is a login event, defined by (`user_id`, `user_login_time`). Priciples 1 is not violated here, but We checked for duplicate login events per user to prevent further analytic errors.
 
+```{r}
+# Type of case check
+login |> 
+  group_by(user_id, user_login_time) |> 
+  summarise(n_distinct = n_distinct(user_id, user_login_time), .groups = "drop") |> 
+  count(n_distinct)
+
+# Check for duplicates
+login_dupes <- login |>
+  count(user_id, user_login_time) |>
+  filter(n > 1)
 ```
+
+No duplicated rows were found. Each row is a single login event,representing a login by a user at a specific time.
 
 ### 2.2.5 Post.csv
 
 Principle 1 was applied to split post attributes and viewer attributes into two different tibbles.
 
-```{r}
-# FIXME: Renaming variables by removing uppercase and adding underscores.
-# Convert post ID and viewer ID to character to avoid accidental numeric behaviour.
-# Convert from double to integer type.
-# Convert from double to datetime type.
 
-```
-
-We checked for the possible type of cases in `post.csv`, after a few trials, we found `viewer_id` does not belong to the type of case of "post".
+We checked for the possible type of cases in `Post.csv`.`viewer_id` was found not belong to the type of case of "post".
 
 ```{r}
-# For each value of the selected type of case, calculate the number of distinct values of the selected variable.
-# Count number of distinct variable values per type of case: 
-# If 1, then variable has unique value for each case.
+# Check for violation (multiple views per post)
 post |> 
   group_by(post_id) |>
   summarise(n_distinct = n_distinct(viewer_id), .groups = "drop") |>
   count(n_distinct)
 ```
 
-The raw data set `Post.csv` was then split into two separate tibbles based on the type of cases. `post_sub_1` included information about each post, `post_sub_2` contained only two variables: `post_id` and `viwer_id`. `distinct()` was used on the primary key(s) to eliminate repetitions, as well as further clarity. `post_sub_1` was thus reduced to a parsimonious data set of 547 rows from 91031 rows.
+The raw data set `Post.csv` was then split into two separate tibbles based on the type of cases. `post_sub1` included information about each post, `post_sub2` contained only two variables: `post_id` and `viwer_id`. `distinct()` was used on the primary key(s) to remove duplicates. `post_sub1` was thus reduced to a parsimonious data set of 547 rows from 91031 rows.
 
 ```{r}
 # Splitting post and view information into 2 separate tibbles
-# Transform tidied post_sub_1 to make it clearer
-post_sub_1 <- post |> 
+# Adjust to select post-only variables
+# Each row: one post
+post_sub1 <- post |> 
   select(post_id : sync_time) |> 
   distinct(post_id, .keep_all = TRUE) 
 
-# FIXME: Ensure unique (post_id, viewer_id) rows
-post_sub_2 <- post |> 
+# View events
+# Each row: one unique (post, viewer) event
+post_sub2 <- post |> 
   select(post_id, viewer_id) |> 
   distinct(post_id, viewer_id, .keep_all = TRUE)
 ```
+
+Now for `post_sub1`, each row is a unique post; for `post_sub2`, each row is a unique view event (a user viewing a post).
 
 ### 2.2.6 Presurvey.csv
 
@@ -159,7 +238,7 @@ This file...
 ## 3.1 Comment.csv
 
 ```{r}
-comment |> 
+comment_tidied |> 
   count(post_id, comment_time, commenter_id) |> 
   filter(n > 1)
 ```
@@ -167,7 +246,7 @@ comment |>
 ## 3.3 Like.csv
 
 ```{r}
-like |> 
+like_tidied |> 
   count(post_id, liker_id) |> 
   filter(n > 1)
 ```
@@ -185,7 +264,7 @@ login |>
 ### 3.5.1 post_sub_1
 
 ```{r}
-post_sub_1 |> 
+post_sub1 |> 
   count(post_id) |> 
   filter(n > 1)
 ```
@@ -193,7 +272,7 @@ post_sub_1 |>
 ### 3.5.2 post_sub_2
 
 ```{r}
-post_sub_2 |> 
+post_sub2 |> 
   count(post_id, viewer_id) |> 
   filter(n > 1)
 ```
