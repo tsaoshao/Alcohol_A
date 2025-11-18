@@ -1,0 +1,243 @@
+---
+title: "Kainan_Report"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+# Read all necessary packages
+library(tidyverse)
+# Read PreSurvey.csv files
+PreSurvey <- read.csv("/Users/kainan/Documents/【My Document】/UvA CS/Masters/R/DataSet/AlcoholData/PreSurvey.csv")
+```
+
+## Principle 1
+
+According to Principle 1, each type of case should have its own tibble. We first check the primary key to see whether different case types can be detected directly from the raw data. In this dataset, the primary key (*UserID*) does not reveal any structural differences, so we rely on inspecting the variables themselves. Based on that, we identify two distinct types of cases: group-member information and user-level information. We therefore split the dataset into two tibbles before continuing with the tidying process.
+
+**Check the primary key**
+
+```{r results='hide'}
+PreSurvey |> 
+  count(UserID) |> 
+  filter(n > 1)
+```
+
+By checking the primary key, we found that *UserID 470* submitted two fully completed but inconsistent PreSurvey entries.
+
+**Exclude UserID 470 from the dataset**
+
+```{r results='hide'}
+PreSurvey <- PreSurvey |> 
+  filter(UserID != 470)
+```
+
+Since we could not determine which response was valid, and keeping both would double-count this user, we excluded this user from the dataset.
+
+**Check the primary key again**
+
+```{r results='hide'}
+PreSurvey |> 
+  count(UserID) |> 
+  filter(n > 1)
+```
+
+After removing the duplicate user, we check the primary key again. Now, each *UserID* appears only once, which shows that *UserID* functions as the primary key for the *PreSurvey* tibble at this stage.
+
+**Check missing values in primary key**
+
+```{r results='hide'}
+PreSurvey |> 
+  filter(is.na(UserID))
+```
+
+This step checks whether any rows have a missing *UserID*. A primary key cannot contain missing values, so this helps confirm that all cases are properly identified before we continue with further tidying.
+
+::: callout-warning
+## Important
+
+Although checking the primary key in the raw data does not reveal different types of cases, applying Principle 2 later will change the row structure through pivoting, which in turn alters the primary key and exposes distinct case types. To keep the workflow cleaner and avoid unnecessary complexity after pivoting, we identify these case types in advance and split the dataset before further tidying.
+:::
+
+**Select related columns based on type of case (1)**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey |>  select(
+  UserID,
+  starts_with("GroupMember_")
+)
+```
+
+Since the primary key didn’t tell us anything about different case types, we looked directly at the variables themselves. From their structure, we could clearly see that the dataset mixes group-member information with user-level information. Based on this distinction, and following Principle 1, we separated the group-member variables into *PreSurvey_sub1*.
+
+**Select related columns based on type of case (2)**
+
+```{r results='hide'}
+PreSurvey_sub2 <- PreSurvey |> select(
+  !starts_with("GroupMember_")
+)
+```
+
+After separating out the group-member variables, the remaining columns represent user-level information. We collect these into *PreSurvey_sub2*, which forms the user-level tibble for the rest of the tidying steps.
+
+::: callout-note
+Since both resulting tibbles still keep UserID as the primary key, we do not repeat the duplicate or missing-value checks here.
+:::
+
+## Principle 2
+
+According to Principle 2, each observation should appear in its own row. In the *PreSurvey_sub1* tibble, a single row still contained multiple *GroupMember\_* responses from the same user, so several observations were packed together. To address this, we used pivot_longer() to pull these member-level variables out into separate rows. After pivoting, each row represents one clear *UserID*\**Column* observation. We then looked at the new primary key (*UserID*\**Column*) to make sure there were no duplicates or missing values.
+
+**Pivot GroupMember\_ columns to long format**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  pivot_longer(
+    cols = -UserID,
+    names_to  = "Column",
+    values_to = "Value"
+  )
+```
+
+This step reshapes all *GroupMember\_* variables into a long format. Each original column is turned into a row so that every member-level response is listed separately rather than being packed inside a single wide row.
+
+**Check the primary key**
+
+```{r results='hide'}
+PreSurvey_sub1 |> 
+  count(UserID, Column) |> 
+  filter(n > 1)
+```
+
+This step checks whether the primary key (*UserID*\**Column*) appears more than once after pivoting. Since these two fields together form the new primary key in the long table, this check helps confirm that the reshaped tibble does not contain duplicate observations.
+
+**Check missing values in primary key**
+
+```{r results='hide'}
+PreSurvey_sub1 |>
+  filter(is.na(UserID) | is.na(Column))
+```
+
+This step checks whether any *UserID*\**Column* keys are missing, ensuring that every long-format row is a valid observation.
+
+## Principle 3
+
+According to Principle 3, each variable should have its own column. After pivoting to long format, the *PreSurvey_sub1* tibble still mixed different pieces of information: the *Column* column combined both the member index and the variable name, and the *Value* column combined different type of responses. To resolve this, we split the encoded column names into separate components and pivoted the table wider again. After this, each variable has its own column, and the tibble meets the requirement of Principle 3.
+
+**Split the encoded column names**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  separate_wider_delim(
+    Column,
+    delim = "_",
+    names = c("Prefix", "Member", "Variable"),
+    too_few = "align_start",
+    too_many = "merge"
+  )
+```
+
+This step splits the combined column names into separate parts. We use separate_wider_delim() to split *Column* at each underscore, which gives us three components: the prefix, the member index, and the variable name. This prepares the tibble for the next reshaping step.
+
+**Clean and select variable components**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  mutate(
+    Variable = ifelse(is.na(Variable), "MemberID", Variable),
+    Member   = as.integer(Member)
+  ) |>
+  select(UserID, Member, Variable, Value)
+```
+
+We replace missing variable names with *MemberID* and convert the member index into an integer. Then we keep only the columns needed for the next reshaping step: *UserID*, *Member*, *Variable*, and *Value*.
+
+**Reshape the tibble to wide format**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  pivot_wider(
+    id_cols     = c(UserID, Member),
+    names_from  = Variable,
+    values_from = Value
+  ) |>
+  arrange(UserID, Member)
+```
+
+After cleaning the variable components, we reshape the tibble back into a wide format using pivot_wider(). This spreads each variable into its own column, with *UserID* and *Member* defining each observation. Finally, we sort the rows for clarity so the structure aligns with Principle 3.
+
+**Check the primary key**
+
+```{r results='hide'}
+PreSurvey_sub1 |> 
+  count(UserID, Member) |> 
+  filter(n > 1)
+```
+
+This checks whether the new primary key (*UserID*\**Member*) is unique after reshaping, ensuring that each group-member observation appears only once.
+
+**Check missing values in primary key**
+
+```{r results='hide'}
+PreSurvey_sub1 |> 
+  filter(is.na(UserID) | is.na(Member))
+```
+
+This checks whether any rows in the new tibble are missing either *UserID* or *Member*, since a valid primary key cannot contain NA values.
+
+**Remove empty group-member rows**
+
+```{r results='hide'}
+PreSurvey_sub1 <- PreSurvey_sub1 |>
+  filter(!if_all(-c(UserID, Member), is.na))
+```
+
+These rows contain a valid *UserID* and *Member* index but no actual data for any group-member variables. Since they do not represent meaningful observations, we remove them before continuing.
+
+## Principle 4
+
+According to Principle 4, each cell should contain only one value. In the *PreSurvey_sub2* tibble, the variable *Alc_Freq_Normal* stored both a numeric code and a descriptive label in the same cell, which mixes two pieces of information. To fix this, we separated the numeric part from the text label and converted the code into an integer. After this step, each cell holds only a single value, and the variable structure follows Principle 4.
+
+**Separate code and label in Alc_Freq_Normal**
+
+```{r results='hide'}
+PreSurvey_sub2 <- PreSurvey_sub2 |> 
+  separate_wider_delim(
+    Alc_Freq_Normal,
+    delim = ". ",
+    names = c("AlcFreq_code", "AlcFreq_label"),
+    too_few = "align_start"
+  ) 
+```
+
+This step splits the *Alc_Freq_Normal column* into two fields: the numeric code and the text label. We use separate_wider_delim() to detect the “. ” delimiter and pull the two parts apart, so that each cell contains only one piece of information as required by Principle 4.
+
+**Convert the frequency code to an integer**
+
+```{r results='hide'}
+PreSurvey_sub2 <- PreSurvey_sub2 |> 
+  mutate(
+    AlcFreq_code = as.integer(AlcFreq_code)
+  )
+```
+
+This converts the extracted code into a numeric value so it can be used properly in later analyses.
+
+**Check the primary key**
+
+```{r results='hide'}
+PreSurvey_sub2 |> 
+  count(UserID) |> 
+  filter(n > 1)
+```
+
+This checks whether *UserID* is still a unique primary key in *PreSurvey_sub2* by looking for any duplicated user IDs.
+
+**Check missing values in primary key**
+
+```{r results='hide'}
+PreSurvey_sub2 |>
+  filter(is.na(UserID))
+```
+
+This checks whether any rows in *PreSurvey_sub2* have a missing *UserID*, to confirm that the primary key is fully observed.

@@ -106,7 +106,7 @@ To decide if principle 1 was violated in each data set, we used `group_by()`, `s
 
 ### 2.2.1 Comment.csv
 
-The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by (`post_id`, `commenter_id`, `comment_time`).We assessed whether there were duplicate rows for the same comment event, and also whether attributes such as `comment_content` vary within the same case (i.e., for the same `post_id`, `commenter_id`, `comment_time`).
+The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by (`post_id`, `commenter_id`, `comment_time`). We assessed whether there were duplicate rows for the same comment event, and also whether attributes such as `comment_content` vary within the same case (i.e., for the same `post_id`, `commenter_id`, `comment_time`).
 
 Principle 1 was not violated in this set as all variables belong to the same type of case.
 

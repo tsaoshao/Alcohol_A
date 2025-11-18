@@ -1,0 +1,428 @@
+---
+title: "report"
+format: html
+editor: visual
+---
+
+# Alcohol Data Tidying Report
+
+## Introduction
+
+... This is a student project of data tidying in R studio.
+
+```{r}
+#| label: data-importing
+
+library(tidyverse)
+
+comment <- read_csv("Comment.csv")
+day_data <- read_csv("DayData.csv")
+like <- read_csv("Like.csv")
+login <- read_csv("Login.csv")
+post <- read_csv("Post.csv")
+pre_survey <- read_csv("Presurvey.csv")
+user <- read_csv("User.csv")
+week_data <- read_csv("WeekData.csv")
+```
+
+## Table relations and primary key checking
+
+### DayData.csv
+
+For checking the primary key, we first looked at how many people were in the dataset. Then we discovered that there are multiple rows per person per day, with no less than 207 rows where that was the case.
+
+```{r}
+
+#check how many rows in the daydataset.
+nrow(DayData_tidy)
+#so now we know there are 10019 rows in the daydataset. 
+
+#check how many persons are included in the daydataset.
+DayData_tidy %>% 
+  count = (UserID)
+#based on this we can say there are 282 persons in the daydataset (nrows = 282)
+
+#finding out primary key
+DayData_tidy|> 
+  count(UserID, day_nr,) %>% 
+  filter(n > 1) 
+#here we found that there are multiple rows per person per day. 
+
+#check how many multiple rows per person per day are in the dataset.
+DayData_tidy|> 
+  count(UserID, day_nr,) %>%  
+  filter(n > 1) %>% 
+  nrow()
+#there are 207 days per person that have multiple rows.
+
+```
+
+Next, we took a closer look at the duplicates by creating a new temporary dataset specifically for them. We created a temporary dataframe for the duplicates to gain insight into the duplicate rows. In addition, we followed the approach used in the tutorial for this. This showed that there are indeed multiple rows per person per day, such as two rows for person 106 on day 11.
+
+```{r}
+#making a seperate datatibble with only the dupliactes.
+duplicates <- DayData_tidy %>% 
+  count(UserID, day_nr) %>% 
+  filter(n > 1)
+
+View(duplicates) 
+#this makes sense since there are as well 207 rows.
+
+#here I found out there are multiple rows per person per day, and the reason why differs (some drinken more over time or some stopped to early). 
+
+#doing the same but then how it's done in the tutorial.
+DayData_tidy |>
+  # (ADD HERE) for each combination of selected primary key variables...
+  group_by(UserID, day_nr) |>
+  # ...calculate the number of cases with identical values on the grouping variables 
+  mutate(n_identical = n()) |> 
+  # retain only cases that are not unique on the selected variables (i.e. cases that identify this list of variables as incomplete primary key)
+  filter(n_identical > 1) |>
+  # (ALSO ADD HERE) sort the cases, so duplicates are next to each other
+  arrange( UserID, day_nr)|> 
+  # show only the first two cases that are duplicates
+  ungroup() |>
+  slice(1:2)
+
+```
+
+The data showed that the rows were duplicated for day and person, because some respondents did not finish the questionnaire on their first attempt and later filled it in again. To correct this, the incomplete questionnaires were excluded. After removing the unfinished entries, there were still 133 rows for the same day per person. Another check was carried out to gain more insight into the duplicate rows, and since all of these rows were completed, this step proved to be effective.
+
+```{r}
+
+#we can not use the persons who haven't finished the questionnaire. So we delete them from the dataset.
+DayData_tidy <- DayData_tidy %>%
+  filter(Finished == 1)
+
+#recheck how many multiple rows per person per day are in the dataset.
+DayData_tidy|> 
+  count(UserID, day_nr,) %>%  
+  filter(n > 1) %>% 
+  nrow()
+#there are 133 days per person that have multiple rows. This means they have multiple rows per person per day. 
+
+#check example for differences per row.
+DayData_tidy |>
+  # (ADD HERE) for each combination of selected primary key variables...
+  group_by(UserID, day_nr) |>
+  # ...calculate the number of cases with identical values on the grouping variables 
+  mutate(n_identical = n()) |> 
+  # retain only cases that are not unique on the selected variables (i.e. cases that identify this list of variables as incomplete primary key)
+  filter(n_identical > 1) |>
+  # (ALSO ADD HERE) sort the cases, so duplicates are next to each other
+  arrange( UserID, day_nr)|> 
+  # show only the first two cases that are duplicates
+  ungroup() |>
+  slice(1:2)
+#this works and they all finished. The differences here are in the other variables (columns).
+
+```
+
+Next, we examined how the duplicate rows differed from one another. It turned out that some respondents completed the questionnaire multiple times in a single day, but at different times. For example, four hours after the first entry, they might have reported more alcohol consumption or additional snacks. To address this, we chose to keep the most recent row and remove the earlier one(s). In this step, the invalid values, for example the values containing text, were also removed.
+
+```{r}
+
+#now there are still some multiple rows per person per day. We'll pick only the most recent ones.
+DayData_tidy <- DayData_tidy %>%
+  mutate(datum = as.Date(EndDate)) %>%   
+  group_by(UserID, datum) %>%             
+  arrange(desc(EndDate)) %>%               
+  slice(1) %>%                         
+  ungroup()                  
+
+#I accidentally wrote date in dutch. So here i redo it.
+DayData_tidy <- DayData_tidy %>%
+  rename(Date = datum)
+
+#some values have text in it. check it out.
+  unique(DayData_tidy$Snack_Freq)
+#around 17 of these answers.
+
+#i'll change those so that only the numbers will be used. 
+DayData_tidy <- DayData_tidy %>% 
+  mutate(across(Alc_Occ:Snack_Freq, parse_number))
+#the values with no number in it are now NA's
+
+#check how many multiple rows per person per day are in the dataset.
+DayData_tidy|> 
+  count(UserID, day_nr) %>%  
+  filter(n > 1) %>% 
+  nrow()
+#Now there are still 44 doubles.
+
+```
+
+After keeping the most recent row per person per day, there were still 44 duplicate rows left. We examined how these rows differed from one another. It turned out that some respondents had entered data for the same day, but had actually completed the questionnaire on different dates. To ensure that the most recent entry was used in these cases as well, we relied not on the newly created “date” variable but on “EndDate.”
+
+```{r}
+#checking out how the rows differ from each other.
+DayData_tidy |>
+  # (ADD HERE) for each combination of selected primary key variables...
+  group_by(UserID, day_nr) |>
+  # ...calculate the number of cases with identical values on the grouping variables 
+  mutate(n_identical = n()) |> 
+  # retain only cases that are not unique on the selected variables (i.e. cases that identify this list of variables as incomplete primary key)
+  filter(n_identical > 1) |>
+  # (ALSO ADD HERE) sort the cases, so duplicates are next to each other
+  arrange( UserID, day_nr)|> 
+  # show only the first two cases that are duplicates
+  ungroup() |>
+  slice(1:6)
+#now we see that some people also have filled in the same day per person on different days. 
+
+#to fix that, ill not use the new variable date to filter the most recent one, but the enddate.
+DayData_tidy <- DayData_tidy %>%
+  mutate(EndDate = as.POSIXct(EndDate)) %>%
+  group_by(UserID, day_nr) %>%
+  arrange(desc(EndDate)) %>%
+  slice(1) %>%
+  ungroup()
+
+#check again how many multiple rows per person per day are in the dataset.
+DayData_tidy %>% 
+  count(UserID, day_nr) %>%  
+  filter(n > 1) %>% 
+  nrow()
+#the result is 0. The primary key is UserId  x day_nr.
+```
+
+In the final check, it turned out that there are 0 rows for UserID × day_nr, so we can assume that the primary key of the Day Data set is UserID × day_nr.
+
+```{r}
+View(DayData_tidy)
+
+```
+
+### WeekData.csv
+
+To determine the primary key of the week dataset, roughly the same steps were followed as for the day data. First, we looked at how many people were in the dataset, which was 270. Then we checked how many days were in the dataset, which was 6, and also how many weeks were included, which was 6 as well. The day numbers were the same for each week: day 8, day 15, day 22, day 29, day 36, and day 43. Since these days are the same for each week number (for example, every week 1 has day number 8), day_nr is not part of the primary key.
+
+```{r}
+
+#check how many persons are included in the weekdataset.
+WeekData_tidy |> 
+  count(UserID) |> 
+  nrow()
+# there are 270 rows - so 270 unique persons. 
+
+#check how many days are included in the weekdataset.
+WeekData_tidy |> 
+  count(day_nr) |> 
+  nrow()
+#there are 6 rows - so 6 days.
+
+#check how many weeks are included in the weekdataset.
+WeekData_tidy |> 
+  count(week_nr) |> 
+  nrow()
+#there are 6 rows - so 6 weeks.
+
+
+#we want to have an overview of the days and frequency.
+WeekData_tidy |> 
+  count(day_nr)
+# this shows there are 6 days (8, 15, 22, 29, 36, 43), and 200+ rows per day.
+
+#we want to have an overview of the weeks and frequency.
+WeekData_tidy |> 
+  count(week_nr)
+# this shows there are 6 weeks (1,2,3,4,5,6), and 200+ rows per week
+
+#this means the values in the day_nr are the same for every week. 
+
+```
+
+Next, we looked at the number of rows that would remain after counting by UserID and week_nr. This turned out to be 26. When we examined the duplicates in person and week more closely, we found that, just like in the day dataset, several respondents had completed the questionnaire for the same week more than once. The differences were similar as well: in some cases a questionnaire had not been completed and was later filled in again, or the values had changed between entries. For that reason, we again decided to keep only the completed and most recent rows and to exclude the others.
+
+```{r}
+
+#to check whether the primary key is week_nr x UserID (since the day_nr is the same for all week_nr per person)
+WeekData_tidy|> 
+  count(UserID, week_nr) |>  
+  filter(n > 1) |> 
+  nrow()
+#results in 26 rows. 
+
+#To see the duplicates as done in the tutorial.
+WeekData_tidy |>
+  # (ADD HERE) for each combination of selected primary key variables...
+  group_by(UserID, week_nr) |>
+  # ...calculate the number of cases with identical values on the grouping variables 
+  mutate(n_identical = n()) |> 
+  # retain only cases that are not unique on the selected variables (i.e. cases that identify this list of variables as incomplete primary key)
+  filter(n_identical > 1) |>
+  # (ALSO ADD HERE) sort the cases, so duplicates are next to each other
+  arrange( UserID, week_nr)|> 
+  # show only the first two cases that are duplicates
+  ungroup() |>
+  slice(1:6)
+#now we see that some people also have filled in the same week per person on different days. 
+
+#we can not use the persons who haven't finished the questionnaire. So we delete them from the dataset.
+WeekData_tidy <- WeekData_tidy |>
+  filter(Finished == 1)
+
+#to keep only the most recent rows. 
+WeekData_tidy <- WeekData_tidy |>
+  mutate(EndDate = as.POSIXct(EndDate)) |>
+  group_by(UserID, week_nr) |>
+  arrange(desc(EndDate)) |>
+  slice(1) |>
+  ungroup()
+
+#check again the number of multiple rows per week per person
+WeekData_tidy|> 
+  count(UserID, week_nr) |> 
+  filter(n > 1) |> 
+  nrow()
+#results in 0 rows. 
+```
+
+```{r}
+
+After this was carried out, the check for the primary key returned 0 rows, which means we can conclude that the primary key for the Week Data set is UserID × week_nr.
+
+```
+
+## Principle 1
+
+### DayData.csv
+
+To investigate whether principle 1 was violated in the day dataset, it is necessary to explore the dataset. This dataset shows the occurrence, frequency, and sociality of alcohol use, sports, and snacking for each person per day. It also indicates how the person felt on that day. The primary key of the dataset is UserID x day_nr, as shown in the code before. All variables in this dataset describe characteristics of the person per day. Therefore, the Day Dataset does not violate principle 1. It is also not necessary to split the Day Dataset into separate tibbles.
+
+### WeekData.csv
+
+Similar to the Day Data, the Week Data contains information about each person per day, but this time also per week. Each week, respondents were asked to fill in the questionnaire. As mentioned before, it turns out that the values in the day_nr column are the same for each weekly measurement, because the questionnaire is filled in on the same day each week. The primary key is UserID x week_nr.
+
+The variables in this dataset cover the assessment of alcohol through 15 questions, as well as perceptions of the intention to consume alcohol in the upcoming week. Additionally, it includes how often the SNS app was used in the past week and how attentively it was viewed. All these variables (columns) therefore refer to the person x week. It is therefore not necessary to split the dataset into multiple tibbles, as principle 1 is not violated.
+
+## Principle 2
+
+### DayData.csv
+
+For principle 2, that each observation must have its own row, Day Data is not in violation. The repeated information, for example the values in day_nr, is necessary and dependent on the UserID. There are no columns that are actually values.
+
+However, it was briefly explored whether the 9 columns (Alc_Occ, Alc_Freq, Alc_Soc, Sport_Occ, Sport_Freq, Sport_Soc, Snack_Occ, Snack_Freq, and Snack_Soc) could be tidied up, since Occ, Freq, and Soc all measure the same concept, only varying by activity. Therefore, the column names were moved into rows using pivot_longer as step 1. Because some values in these columns contain text, for example, respondents sometimes added words to their answers (e.g., “3 glasses”), it was first necessary to try converting them into character type. For this exploration, a temporary new dataset was created, namely PersonDayActivity.
+
+```{r}
+#some people typed something in the values (e.g. 3 glazen, of 3 uur). First, we have to make these to characters. 
+DayData_tidy <- DayData_tidy %>% 
+  mutate(
+    Alc_Occ = as.character (Alc_Occ),
+    Alc_Freq = as.character (Alc_Freq),
+    Alc_Soc = as.character (Alc_Soc),
+    Sport_Occ = as.character (Sport_Occ),
+    Sport_Freq = as.character (Sport_Freq),
+    Sport_Soc = as.character (Sport_Soc),
+    Snack_Occ = as.character (Snack_Occ),
+    Snack_Freq = as.character (Snack_Freq),
+    Snack_Soc = as.character (Snack_Soc)
+    )
+                  
+#now they are al characters, we make the columns variables into values of the variable "Activity". 
+PersonDayActivity <- DayData_tidy %>% 
+  pivot_longer(
+    cols = c(Alc_Occ, Alc_Freq, Alc_Soc,
+    Sport_Occ, Sport_Freq, Sport_Soc,
+    Snack_Occ, Snack_Freq, Snack_Soc), 
+      names_to = 'Activity', 
+      values_to = 'Value')
+PersonDayActivity
+                  
+```
+
+At this point, the column names were in the rows, as you would do when addressing principle 2. However, it was still necessary to separate the activity from the Occ, Freq, and Soc values. This was done using the fucntion pivot_longer_delim.
+
+```{r}
+#seperating the activity from the measurement.
+PersonDayActivity <- PersonDayActivity %>% 
+  separate_wider_delim(
+  cols = Activity,
+  delim = "_",
+  names = c("Activity", "Measure"))
+```
+
+After that, the Occ, Freq, and Soc values were returned to separate columns.
+
+```{r}
+ 
+PersonDayActivity <- PersonDayActivity %>% 
+  pivot_wider(
+    names_from = Measure, values_from = Value)
+```
+
+The problem is that the Activity column at this moment contains values that actually represent separate variables or columns. Because of this, this exploration remains only an exploratory step, and we will not use this approach of trying to turn the rows into separate observations in the tidied dataset. However, it does show how a potential violation of principle 2 could have been resolved, although this was not actually the case.
+
+Long story short, there is therefore no violation of principle 2.
+
+### WeekData.csv
+
+As in the Day Data, there are no violations of principle 2 in the Week Data. Each observation has its own row. The repeated information, such as the values in week_nr, is necessary and dependent on the UserID. There are no columns that are actually values.
+
+## Principle 3
+
+### DayData.csv
+
+Day Data does not violate Principle 3. Each variable has its own column. The values in the rows do not represent information that should be separate variables themselves. Different types of information are not stored in the same column. Rather, related information is distributed across separate columns. For example, Alc_Occ, Alc_Freq, and Alc_Soc are distinct variables, each with its own column.
+
+### WeekData.csv
+
+Week Data does not violate Principle 3. Every variable is assigned to its own column and the row values do not contain information that should be treated as separate variables. Columns do not mix different types of information, since the related data is organized across multiple columns. For instance, Alc_Ass_1 through Alc_Ass_15 are individual variables, each represented by its own column.
+
+It is, however, still possible to combine the 15 items for Alc_Ass by calculating their average using the mutate function. The same applies to Alc_IN and its three items.
+
+```{r}
+#making new variable with means of acl_ass1-15.
+WeekData_tidy <- WeekData_tidy %>% 
+  mutate(Alc_ass_mean = rowMeans(across(Alc_Ass1:Alc_Ass15), na.rm = TRUE))
+
+#rounding in 2 decimals
+WeekData_tidy <- WeekData_tidy %>%
+  mutate(Alc_ass_mean = round(Alc_ass_mean, 2))
+
+#making new variable with means of alc_in1-3.
+WeekData_tidy <- WeekData_tidy %>% 
+  mutate(Alc_in_mean = rowMeans(across(Alc_IN1:Alc_IN3), na.rm = TRUE))
+
+#rounding in 2 decimals.
+WeekData_tidy <- WeekData_tidy %>%
+  mutate(Alc_in_mean = round(Alc_in_mean, 2))
+```
+
+## Principle 4
+
+### DayData.csv
+
+In the Day Data, principle 4 is not violated. Since the questions about frequency (Alc_Freq, Sport_Freq, and Snack_Freq) are open-ended, some respondents in the original raw data added words to their answers, for example “3 glasses” when indicating how much they had drunk that day. However, this issue was resolved once the data was cleaned during finding out the primary key (after removing multiple rows per person per day). This was verified using the following code, which showed no irregular entries containing values.
+
+```{r}
+#finding out if there are still some values with text - Alc_Freq.
+DayData_tidy %>%
+  count(Alc_Freq) %>% 
+  arrange(desc(Alc_Freq)) %>% 
+  print(n = Inf)
+# not the case for Alc_Freq.
+
+#finding out if there are still some values with text - Sport_Freq.
+DayData_tidy %>%
+  count(Sport_Freq) %>% 
+  arrange(desc(Sport_Freq)) %>% 
+  print(n = Inf)
+# not the case for Sport_Freq.
+
+#finding out if there are still some values with text - Snack_Freq.
+DayData_tidy %>%
+  count(Snack_Freq) %>% 
+  arrange(desc(Snack_Freq)) %>% 
+  print(n = Inf)
+# not the case for Snack_Freq.
+
+```
+
+### WeekData.csv
+
+In the Week Data, it was not necessary to split the values because they all consist of numbers, with no unnecessary text or values that needed separating. Each value has its own cell, and each cell contains only a single piece of information. Principle 4 was not violated.
+
+## Table Joining
+
+## Description

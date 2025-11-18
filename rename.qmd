@@ -1,0 +1,72 @@
+---
+title: "rename"
+format: html
+editor: visual
+---
+
+To make way for further analysis, variable names were transformed into lowercase form with underscores. `post_id` and `viewer_id` were converted to character because they are only categorical variables without numerical meaning. `post_comments`, `post_likes` and `post_views` were then converted from `double` to `integer` to avoid analytic errors. As time-sensitive variables like `post_time` and `sync_time` were recognised as datetime type by `read_csv()`, time parsing functions were not used.
+
+```{r}
+#| label: data-cleaning
+
+comment <- comment |> 
+  clean_names() |> 
+  mutate(
+    post_id = as.character(post_id),
+    commenter_id = as.character(commenter_id)
+  )
+
+day_data <- day_data |> 
+  clean_names() |> 
+  mutate(
+    user_id = as.character(user_id)
+    # Add more type conversions here as needed, e.g.:
+    # day_num = as.integer(day_num),
+    # total_drinks = as.numeric(total_drinks),
+  )
+
+like <- like |> 
+  clean_names() |> 
+  mutate(
+    post_id = as.character(post_id),
+    liker_id = as.character(liker_id)
+  )
+
+login <- login |> 
+  clean_names() |> 
+  mutate(user_id = as.character(user_id))
+
+# Convert post ID and viewer ID to character to avoid accidental numeric behaviour.
+# Convert from double to integer type.
+# Convert from double to datetime type.
+post <- post |>
+  clean_names()|>
+  mutate(
+    post_id = as.character(post_id),
+    viewer_id = as.character(viewer_id),
+    post_comments = as.integer(post_comments),
+    post_likes = as.integer(post_likes),
+    post_views = as.integer(post_views)
+  )
+
+pre_survey <- pre_survey |>
+  clean_names() |>
+  mutate(
+    user_id = as.character(user_id)
+    # TODO: Add additional type conversions for survey variables as needed
+  )
+
+user <- user |>
+  clean_names() |>
+  mutate(
+    user_id = as.character(user_id)
+    # TODO: Add further type conversions, e.g. age = as.integer(age), gender = as.character(gender), etc.
+  )
+
+week_data <- week_data |>
+  clean_names() |>
+  mutate(
+    user_id = as.character(user_id)
+    # TODO: Add more, e.g. week_num = as.integer(week_num), total_drinks = as.numeric(total_drinks), etc.
+  )
+```
