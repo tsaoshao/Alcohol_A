@@ -219,8 +219,6 @@ No duplicated rows were found. Each row is a single login event,representing a l
 
 We checked for the possible type of cases in `Post.csv`.`viewer_id` was found not belong to the type of case of "post", which means principle 1 was violated.
 
-<<<<<<< HEAD
-=======
 
 We checked for the possible type of cases in `Post.csv`.`viewer_id` was found not belong to the type of case of "post".
 
