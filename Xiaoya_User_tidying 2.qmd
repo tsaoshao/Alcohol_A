@@ -1,0 +1,144 @@
+---
+title: "Xiaoya_User_tidying"
+format: html
+editor: visual
+---
+
+## User Principle1
+
+Step1: According to the cases type identifying principle: Every variable in the primary key and every combination of these variables may represent a different type of case. The primary key for User table is UserID, and the User case type can be identified.
+
+```{r echo=FALSE}
+library(dplyr)
+library(tidyverse)
+library(DT)
+library(htmltools)
+user <- read.csv("/Users/xiaoya/Desktop/UvA/R/AlcoholData/User.csv") 
+user |> count(UserID) |> 
+  filter(n > 1)
+```
+
+But after applying common sense, we can find that Condition is a characteristic of Group_nr. Therefore, our preliminary assumption is the the User table includes two cases types: User and Group. The Step2 is to conduct a uniqueness check.
+
+```{r}
+user |>
+  group_by(UserID) |>
+  summarise(across(everything(), ~ n_distinct(.x)), .groups = "drop") |>
+  pivot_longer(
+    cols = -UserID,
+    names_to = "variable",
+    values_to = "n_distinct_per_user"
+  ) |>
+  group_by(variable) |>
+  summarise(
+    max_n_distinct = max(n_distinct_per_user),
+    .groups = "drop"
+  ) |>
+  mutate(
+    is_unique_per_user = max_n_distinct == 1
+  )
+
+```
+
+```{r}
+user |>
+  group_by(Group_nr) |>
+  summarise(across(everything(), ~ n_distinct(.x)), .groups = "drop") |>
+  pivot_longer(
+    cols = -Group_nr,
+    names_to = "variable",
+    values_to = "n_distinct_per_group"
+  ) |>
+  group_by(variable) |>
+  summarise(
+    max_n_distinct = max(n_distinct_per_group),
+    .groups = "drop"
+  ) |>
+  mutate(
+    is_unique_per_group = max_n_distinct == 1
+  )
+```
+
+| Case type | Variables | Notes | Separate tibble? |
+|------------------|------------------|------------------|------------------|
+| User | ID_nr_Vragenlijst, Group_nr, Condition | student characteristics mix with relevan group group characteristics | yes |
+| Group | Condition | Fixed group characteristics | yes |
+
+Step3: According to the rule: The variable belongs to the simplest type of cases (identified by fewest variables) satisfying the check in Step 2. The primary key for the Person case type is UserID (1 variable), and the primary key for the Group case type is Group_nr (1 variable). Regarding Condition: It is unique with respect to UserID It is also unique with respect to Group_nr However, based on semantics and domain knowledge, it clearly represents a group-level condition This attribute can therefore be placed in the smaller Group_nr table, avoiding repeated information in the User table According to the case-type rules, Condition belongs to the Group case type, which indicates that the User table contains a mixed-in Group-level case type. Consequently, a separate groups tibble should be created.
+
+Splitting User into user_sub_1 and user_sub_2 based on Principle 1 user_sub_1 include information of Experimental condition, Type of fake alcohol posts shown during the last three weeks of the data collection. user_sub_2 include information of users themselves including ID, Group number and Role
+
+```{r echo=FALSE}
+user_sub_1 <- user |> 
+  distinct(Group_nr, Condition) 
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(user_sub_1)
+)
+
+user_sub_2 <- user |> 
+  select(UserID, ID_nr_Vragenlijst, Group_nr, UserRole)
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(user_sub_2)
+)
+```
+
+After checking the variables in Group(user_sub_1) tibble, we found that the Condition column contains more than one piece of information, which violates the principle4.Therefore, we split the variable in Condition column into 2 variables: "Valence" and "Sociality" based on Principle 4
+
+```{r echo=FALSE}
+user_sub_1 <- user_sub_1 |>  separate_wider_delim(
+    Condition,
+    delim = "/",
+    names = c("Valence", "Sociality")
+  )
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(user_sub_1)
+)
+```
+
+After checking the variables in User(user_sub_2) tibble, we found that the Condition column contains more than one piece of information, which violates the principle4.Therefore, we split the variable in ID_nr_Vragenlijst column : "Group_nr" and "Questionnaire_nr" based on Principle 4.
+
+```{r echo=FALSE}
+user_sub_2 <- user_sub_2 |> mutate(
+    ID_nr_Vragenlijst = as.character(ID_nr_Vragenlijst), # Turn int into chr
+    Group_nr = as.character(Group_nr),
+    Questionnaire_nr = stringr::str_remove(ID_nr_Vragenlijst, Group_nr),
+    Questionnaire_nr = as.integer(Questionnaire_nr), 
+    Group_nr = as.integer(Group_nr) # Turn chr into int
+  ) |> 
+  select(!ID_nr_Vragenlijst)
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(user_sub_2)
+)
+```
+
+**Check primary key for user_sub_1 (Group) table**
+
+```{r}
+user_sub_1 |> 
+  filter(is.na(Group_nr))
+```
+
+In the initial `Group` table, there was one row with `Group_nr = NA` and `Condition = NA`.\
+Since `Group_nr` is the primary key of the `Group` table, it must not contain missing values.\
+The NA row does not correspond to a real group (it originates from users without group membership), so it was removed from the `Group` table.
+
+**Remove missing value from user_sub_1 (Group) table**
+
+```{r}
+user_sub_1 <- user_sub_1 |> 
+  filter(!is.na(Group_nr))
+```
+
+**Check primary key for user_sub_2 (User) table**
+
+```{r}
+user_sub_2 |> 
+  filter(is.na(UserID))
+```
+
+`Group_nr` is a foreign key that links participants to groups.\
+Missing values in `Group_nr` and `ID_nr_Vragenlijst` occur only for `admin` and `special` users, who did not complete the questionnaire and are not assigned to any group. Therefore, these NAs are allowed and are not treated as data errors.

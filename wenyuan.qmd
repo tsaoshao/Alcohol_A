@@ -1,14 +1,18 @@
 ---
 title: "Alcohol Data Tidying Report"
-format: html
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
 editor: visual
 ---
 
-# 1 Introduction
+# 1 Introduction {#introduction}
 
 In this report, we are going to present the process and rationale of our data tidying process of the data set `AlcoholData`, in terms of how the four data tidy principles were applied, how the relations and primary keys of each tibble were found and checked, and the way we joined the tidied tibbles. All data tidying and report writing were done in R studio version 2025.09.2+418.
 
-# 2 Data Tidying
+# 2 Data Tidying {#data-tidying}
 
 ## 2.1 Data Importing
 
@@ -20,6 +24,7 @@ All eight data sets were imported with `read_csv` under `tidyverse` and made use
 # tidyverse for data wrangling; DT for table insertion
 library(tidyverse)
 library(DT)
+library(htmltools)
 
 # Import and rename data sets for clarity
 Comment <- read_csv("AlcoholData/Comment.csv")
@@ -38,7 +43,7 @@ To decide if principle 1 was violated in each data set, we used `group_by()`, `s
 
 ### 2.2.1 Comment.csv
 
-The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by a composite primary key (`PostID`, `CommenterID`, `CommentTime`). We assessed whether there were duplicate rows for the same comment event, and also whether attributes such as `CommentContent` vary within the same case (i.e., for the same `PostID`, `CommenterID`, `CommentTime`).
+The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by a compound primary key (`PostID`, `CommenterID`, `CommentTime`). We assessed whether there were duplicate rows for the same comment event, and also whether attributes such as `CommentContent` vary within the same case (i.e., for the same `PostID`, `CommenterID`, `CommentTime`).
 
 Principle 1 was not violated in this data set as all variables belong to the same type of case.
 
@@ -231,7 +236,19 @@ htmltools::div(
   style = "zoom: 0.8;",
   datatable(
     PreSurvey |> 
-      filter(UserID == 470)
+      filter(UserID == 470),
+    options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+        )
+      )
+    )
   )
 )
 ```
@@ -294,10 +311,10 @@ htmltools::div(
             return data === null ? 'NA' : data;
           }
         ")
+        )
       )
     )
   )
-)
 )
 ```
 
@@ -328,10 +345,10 @@ htmltools::div(
             return data === null ? 'NA' : data;
           }
         ")
+        )
       )
     )
   )
-)
 )
 ```
 
@@ -341,9 +358,117 @@ Since both resulting tibbles still keep `UserID` as the primary key, we do not r
 
 ### 2.2.7 User.csv
 
+**Step 1.** According to the cases type identifying principle: Every variable in the primary key and every combination of these variables may represent a different type of case. The primary key for User table is UserID, and the User case type can be identified.
+
+```{r}
+User |> count(UserID) |> 
+  filter(n > 1)
+```
+
+But after applying common sense, we can find that Condition is a characteristic of Group_nr. Therefore, our preliminary assumption is the the User table includes two cases types: User and Group. **Step 2** is to conduct a uniqueness check.
+
+```{r}
+User |>
+  group_by(UserID) |>
+  summarise(across(everything(), ~ n_distinct(.x)), .groups = "drop") |>
+  pivot_longer(
+    cols = -UserID,
+    names_to = "variable",
+    values_to = "n_distinct_per_user"
+  ) |>
+  group_by(variable) |>
+  summarise(
+    max_n_distinct = max(n_distinct_per_user),
+    .groups = "drop"
+  ) |>
+  mutate(
+    is_unique_per_user = max_n_distinct == 1
+  )
+```
+
+```{r}
+User |>
+  group_by(Group_nr) |>
+  summarise(across(everything(), ~ n_distinct(.x)), .groups = "drop") |>
+  pivot_longer(
+    cols = -Group_nr,
+    names_to = "variable",
+    values_to = "n_distinct_per_group"
+  ) |>
+  group_by(variable) |>
+  summarise(
+    max_n_distinct = max(n_distinct_per_group),
+    .groups = "drop"
+  ) |>
+  mutate(
+    is_unique_per_group = max_n_distinct == 1
+  )
+```
+
+| Case type | Variables | Notes | Separate tibble? |
+|------------------|------------------|------------------|------------------|
+| User | ID_nr_Vragenlijst, Group_nr, Condition | student characteristics mix with relevant group group characteristics | yes |
+| Group | Condition | Fixed group characteristics | yes |
+
+**Step 3.** According to the rule: The variable belongs to the simplest type of cases (identified by fewest variables) satisfying the check in Step 2. The primary key for the Person case type is UserID (1 variable), and the primary key for the Group case type is Group_nr (1 variable). Regarding Condition: It is unique with respect to UserID It is also unique with respect to Group_nr However, based on semantics and domain knowledge, it clearly represents a group-level condition This attribute can therefore be placed in the smaller Group_nr table, avoiding repeated information in the User table According to the case-type rules, Condition belongs to the Group case type, which indicates that the User table contains a mixed-in Group-level case type. Consequently, a separate groups tibble should be created.
+
+Splitting User into User_sub1 and User_sub2 based on Principle 1 User_sub1 include information of Experimental condition, Type of fake alcohol posts shown during the last three weeks of the data collection. User_sub2 include information of Users themselves including ID, Group number and Role
+
+```{r results='hide'}
+User_sub1 <- User |> 
+  distinct(Group_nr, Condition) 
+```
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(User_sub1,
+            options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+        )
+      )
+    )
+  )
+)
+```
+
+```{r results='hide'}
+User_sub2 <- User |> 
+  select(UserID, ID_nr_Vragenlijst, Group_nr, UserRole)
+```
+
+```{r echo=FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(User_sub2,
+            options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+        )
+      )
+    )
+  )
+)
+```
+
 ### 2.2.8 WeekData.csv
 
 ## 2.3 Principle 2: Each observation must have its own row
+
+**Example: PreSurvey_sub1**
 
 According to Principle 2, each observation should appear in its own row. In the `PreSurvey_sub1` tibble, a single row still contained multiple `GroupMember\_` responses from the same user, so several observations were packed together. To address this, we used `pivot_longer()` to pull these member-level variables out into separate rows. After pivoting, each row represents one clear `UserID`\*`Column` observation. We then looked at the new primary key `UserID`\*`Column` to make sure there were no duplicates or missing values.
 
@@ -401,6 +526,8 @@ This step checks whether any `UserID`\*`Column` keys are missing, ensuring that 
 
 ## 2.4 Principle 3: Each variable must have its own column
 
+**Example: PreSurvey_sub1**
+
 According to Principle 3, each variable should have its own column. After pivoting to long format, the `PreSurvey_sub1` tibble still mixed different pieces of information: the `Column` column combined both the member index and the variable name, and the `Value` column combined different type of responses. To resolve this, we split the encoded column names into separate components and pivoted the table wider again. After this, each variable has its own column, and the tibble meets the requirement of Principle 3.
 
 **Split the encoded column names**
@@ -422,7 +549,20 @@ This step splits the combined column names into separate parts. We use `separate
 htmltools::div(
   style = "zoom: 0.8;",
   datatable(
-    head(PreSurvey_sub1, 50))
+    head(PreSurvey_sub1, 50),
+     options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+        )
+      )
+    )
+  )
 )
 ```
 
@@ -453,10 +593,10 @@ htmltools::div(
             return data === null ? 'NA' : data;
           }
         ")
+        )
       )
     )
   )
-)
 )
 ```
 
@@ -487,10 +627,10 @@ htmltools::div(
             return data === null ? 'NA' : data;
           }
         ")
+        )
       )
     )
   )
-)
 )
 ```
 
@@ -536,14 +676,16 @@ htmltools::div(
             return data === null ? 'NA' : data;
           }
         ")
+        )
       )
     )
   )
 )
-)
 ```
 
 ## 2.5 Principle 4: Each value must have its own cell
+
+### 2.5.1 Example 1: PreSurvey_sub2
 
 According to Principle 4, each cell should contain only one value. In the `PreSurvey_sub2` tibble, the variable `Alc_Freq_Normal` stored both a numeric code and a descriptive label in the same cell, which mixes two pieces of information. To fix this, we separated the numeric part from the text label and converted the code into an integer. After this step, each cell holds only a single value, and the variable structure follows Principle 4.
 
@@ -567,8 +709,8 @@ htmltools::div(
   datatable(
     head(PreSurvey_sub2, 50) |> 
       select(UserID, AlcFreq_code, AlcFreq_label, everything())
+    )
   )
-)
 ```
 
 **Convert the frequency code to an integer**
@@ -601,9 +743,27 @@ PreSurvey_sub2 |>
 
 This step checks whether any rows in `PreSurvey_sub2` have a missing `UserID`. Since no rows are returned, we confirm that the primary key is fully observed with no missing values.
 
-# 3 Table relations and primary key checking
+### 2.5.2 Example 2: User_sub1
 
-## 3.1 Comment.csv
+After checking the variables in Group(User_sub1) tibble, we found that the Condition column contains more than one piece of information, which violates the principle 4. Therefore, we split the variable in Condition column into 2 variables: "Valence" and "Sociality" based on Principle 4.
+
+```{r echo=FALSE}
+User_sub1 <- User_sub1 |>  separate_wider_delim(
+    Condition,
+    delim = "/",
+    names = c("Valence", "Sociality")
+  )
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(User_sub1)
+)
+```
+
+# 3 Table contents and relation
+
+## 3.1 Primary key and foreign key
+
+**Comment.csv**
 
 ```{r}
 Comment_tidy |> 
@@ -611,7 +771,7 @@ Comment_tidy |>
   filter(n > 1)
 ```
 
-## 3.3 Like.csv
+**Like.csv**
 
 ```{r}
 Like_tidy |> 
@@ -619,7 +779,7 @@ Like_tidy |>
   filter(n > 1)
 ```
 
-## 3.4 Login.csv
+**Login.csv**
 
 ```{r}
 Login |> 
@@ -627,9 +787,7 @@ Login |>
   filter(n > 1)
 ```
 
-## 3.5 Post.csv
-
-### 3.5.1 Post_sub1
+**Post_sub1**
 
 ```{r}
 Post_sub1 |> 
@@ -637,7 +795,7 @@ Post_sub1 |>
   filter(n > 1)
 ```
 
-### 3.5.2 Post_sub2
+**Post_sub2**
 
 ```{r}
 Post_sub2 |> 
@@ -645,6 +803,13 @@ Post_sub2 |>
   filter(n > 1)
 ```
 
-# 4 Table Joining
+**User_sub1**
+
+```{r}
+user_sub_1 |> 
+  filter(is.na(Group_nr))
+```
+
+# 4 Data Joins
 
 # 5 Description
