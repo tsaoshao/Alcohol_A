@@ -39,21 +39,21 @@ WeekData <- read_csv("AlcoholData/WeekData.csv")
 
 ## 2.2 Principle 1: Each type of case must have its own tibble
 
-To decide if principle 1 was violated in each data set, we used `group_by()`, `summarise()` and `count()` to identify type of cases in each raw data set.
-
 ### 2.2.1 Comment.csv
 
 The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by a compound primary key (`PostID`, `CommenterID`, `CommentTime`). We assessed whether there were duplicate rows for the same comment event, and also whether attributes such as `CommentContent` vary within the same case (i.e., for the same `PostID`, `CommenterID`, `CommentTime`).
 
 Principle 1 was not violated in this data set as all variables belong to the same type of case.
 
-```{r}
+```{r results='hide'}
 # Type of case check
 Comment |> 
   group_by(PostID, CommentTime, CommenterID) |> 
   summarise(n_distinct = n_distinct(CommentContent), .groups = "drop") |> 
   count(n_distinct)
+```
 
+```{r}
 # Check for primary key and duplicates
 Comment_dupes <- Comment |>
   count(PostID, CommenterID, CommentTime) |>
@@ -65,7 +65,7 @@ Comment |> semi_join(Comment_dupes, by = c("PostID", "CommenterID", "CommentTime
 
 After checking for duplicates, we checked for missing values in the primary key columns. Rows with missing keys cannot be reliably identified or linked across tables, and should be addressed during data cleaning.
 
-```{r}
+```{r results='hide'}
 # Check for missing values in primary key columns
 Comment |> 
   filter(is.na(PostID) | is.na(CommenterID) | is.na(CommentTime))
@@ -92,6 +92,214 @@ htmltools::div(
 
 ### 2.2.2 DayData.csv
 
+To investigate whether principle 1 was violated in `DayData`, it is necessary to explore the data set. This data set shows the occurrence, frequency, and sociality of alcohol use, sports, and snacking for each person per day. It also indicated how the person felt on that day. The primary key of the data set is `UserID`\*`day_nr`, as shown in the code below. All variables in `DayData` describe characteristics of the person per day. Therefore, `DayData` does not violate principle 1. It is also not necessary to split `DayData` into separate tibbles.
+
+For checking the primary key, we first looked at how many people were in `DayData`. At first glance, the primary key was `UserID`\*`day_nr`. We found that there are multiple rows per person per day, with at least 207 instances where this occurs.
+
+```{r}
+
+DayData_tidy <- DayData
+
+#check how many rows in the daydataset.
+nrow(DayData_tidy)
+#so now we know there are 10019 rows in the daydataset. 
+
+#check how many persons are included in the daydataset.
+DayData_tidy |> 
+  count(UserID)
+#based on this we can say there are 282 persons in the daydataset (nrows = 282)
+
+#finding out primary key
+DayData_tidy|> 
+  count(UserID, day_nr,) |> 
+  filter(n > 1) 
+#here we found that there are multiple rows per person per day. 
+
+#check how many multiple rows per person per day are in the dataset.
+DayData_tidy|> 
+  count(UserID, day_nr,) |>  
+  filter(n > 1) |> 
+  nrow()
+#there are 207 days per person that have multiple rows.
+
+```
+
+Next, we identified the number duplicates by creating a temporary dataframe specifically for them. To gain further insight into the differences per row, we followed the steps from the tutorial using `n_identical`. This showed that there are indeed multiple rows per person per day, for example two rows for person 106 on day 11.
+
+```{r}
+#making a seperate datatibble with only the dupliactes.
+duplicates <- DayData_tidy |> 
+  count(UserID, day_nr) |> 
+  filter(n > 1)
+
+print(duplicates)
+
+#this makes sense, because in the dataframe 'duplicaties' there are as well 207 rows.
+
+#doing the same but then how it's done in the tutorial.
+DayData_tidy |>
+  group_by(UserID, day_nr) |> 
+  mutate(n_identical = n()) |> 
+  filter(n_identical > 1) |>
+  arrange( UserID, day_nr)|> 
+  ungroup() |>
+  slice(1:2)
+
+#here we found out there are multiple rows per person per day, and the reason why differs (some drunk more over time or some stopped to early).
+
+```
+
+The data showed that the rows were duplicated for day and person, because some respondents did not finish the questionnaire on their first attempt and later filled it in again.
+
+To correct this, the incomplete questionnaires were excluded. Another check was carried out to be sure all unfinished rows were deleted, and since all of these rows were completed, this step proved to be effective. After removing the unfinished entries, there were still 133 rows for the same day per person.
+
+```{r}
+
+#we can not use the persons who haven't finished the questionnaire. So we delete them from the dataset.
+DayData_tidy <- DayData_tidy |>
+  filter(Finished == 1)
+
+#recheck how many multiple rows per person per day are in the dataset.
+DayData_tidy|> 
+  count(UserID, day_nr,) |>  
+  filter(n > 1) |> 
+  nrow()
+#there are 133 days per person that have multiple rows. This means they have multiple rows per person per day. 
+
+#check example for differences per row.
+DayData_tidy |>
+  group_by(UserID, day_nr) |>
+  mutate(n_identical = n()) |> 
+  filter(n_identical > 1) |>
+  arrange( UserID, day_nr)|> 
+  ungroup() |>
+  slice(1:2)
+#this works and they all finished. The differences here are in the other variables (columns).
+
+```
+
+Next, we examined how the remaining duplicate rows differed from one another. It turned out that some respondents completed the questionnaire multiple times in a single day, but at different times. For example, four hours after the first entry, they might have reported more alcohol consumption or additional snacks. To address this, we chose to keep the most recent row and remove the earlier one(s).
+
+```{r}
+
+#now there are still some multiple rows per person per day. We'll pick only the most recent ones.
+DayData_tidy <- DayData_tidy |>
+  mutate(datum = as.Date(EndDate)) |>   
+  group_by(UserID, datum) |>             
+  arrange(desc(EndDate)) |>               
+  slice(1) |>                         
+  ungroup()                  
+
+#I accidentally wrote date in dutch. So here i redo it.
+DayData_tidy <- DayData_tidy |>
+  rename(Date = datum)
+
+```
+
+In this step, the invalid values, for example the values containing text, were also and deleted.
+
+```{r}
+
+#some values have text in it. check it out.
+  unique(DayData_tidy$Snack_Freq)
+#around 17 of these answers. As this question does not appear in our group's individual research questions, we have decided to leave it as it is for now. 
+  
+#but first, some people typed something in the values (e.g. 3 glazen, of 3 uur). First we have to make these to characters. 
+DayData_tidy <- DayData_tidy |>  
+  mutate(
+    Alc_Occ = as.character(Alc_Occ),
+    Alc_Freq = as.character(Alc_Freq),
+    Alc_Soc = as.character(Alc_Soc),
+    Sport_Occ = as.character(Sport_Occ),
+    Sport_Freq = as.character(Sport_Freq),
+    Sport_Soc = as.character(Sport_Soc),
+    Snack_Occ = as.character(Snack_Occ),
+    Snack_Freq = as.character(Snack_Freq),
+    Snack_Soc = as.character(Snack_Soc)
+)
+                  
+#change those so that only the numbers will be used. 
+DayData_tidy <- DayData_tidy |> 
+  mutate(across(Alc_Occ:Snack_Freq, ~ ifelse(grepl("[0-9]", .), ., NA))) |> #the two values with only text are now NA.
+  mutate(across(Alc_Occ:Snack_Freq, parse_number))
+  # the values with no number in it are now NAs.
+  #parse_number already makes these values from characters to numbers again.
+                  
+```
+
+Next, we checked again how many duplicate rows remained based on `UserID` and `day_nr`.
+
+```{r}
+
+#check how many multiple rows per person per day are in the dataset.
+DayData_tidy|> 
+  count(UserID, day_nr) |>  
+  filter(n > 1) |> 
+  nrow()
+#now there are still 44 doubles.
+
+#checking out how the rows differ from each other.
+DayData_tidy |>
+  group_by(UserID, day_nr) |>
+  mutate(n_identical = n()) |> 
+  filter(n_identical > 1) |>
+  arrange( UserID, day_nr)|> 
+  ungroup() |>
+  slice(1:6)
+#now we see that some people also have filled in the same day per person on different days. 
+
+```
+
+After keeping the most recent row per person per day, there were still 44 duplicate rows left. We examined how these rows differed from one another. It turned out that some respondents had entered data for the same day, but had actually completed the questionnaire on different dates. To ensure that the most recent entry was used in these cases as well, we relied not on the newly created `date` variable but on `EndDate`.
+
+```{r}
+
+#to fix that, we'll not use the new variable date to filter the most recent one, but the enddate.
+DayData_tidy <- DayData_tidy |>
+  mutate(EndDate = as.POSIXct(EndDate)) |>
+  group_by(UserID, day_nr) |>
+  arrange(desc(EndDate)) |>
+  slice(1) |>
+  ungroup()
+
+#check again how many multiple rows per person per day are in the dataset.
+DayData_tidy |> 
+  count(UserID, day_nr) |>  
+  filter(n > 1) |> 
+  nrow()
+#the result is 0. The primary key is UserID * day_nr.
+
+```
+
+In the final check, it turned out that there are 0 rows for `UserID`\*`day_nr`, so we can assume that the primary key of the Day Data set is `UserID`\*`day_nr`. As a final step, a filter was used to check whether the `UserID` and `day_nr` contained missing values. This was not the case for `day_nr`, but it was for `UserID`. There were 30 such cases.
+
+```{r}
+
+#check for missing values for day_nr
+DayData_tidy |> 
+  filter(is.na(day_nr)) |> 
+  print(n = Inf)
+
+#check for missing values for UserID
+DayData_tidy |> 
+  filter(is.na(UserID)) |> 
+  print(n = Inf)
+```
+
+```{r}
+
+#removing the rows with NA in the UserID.
+DayData_tidy <- DayData_tidy |> 
+  filter(!is.na(UserID))
+
+#recheck for missing values for UserID.
+DayData_tidy |> 
+  filter(is.na(UserID)) |> 
+  print(n = Inf)
+#this results in 0 rows, so mission completed.
+
+```
+
 ### 2.2.3 Like.csv
 
 The type of case in `Like.csv` is a unique like event, defined by (`PostID`, `LikerID`). It does not violate principle 1 as well, we checked for duplicate and missing values in (`PostID`, `LikerID`) pairs to ensure data set clarity.
@@ -104,15 +312,15 @@ Like_dupes <- Like |>
 
 # View duplicate likers
 Like |> semi_join(Like_dupes, by = c("PostID", "LikerID"))
-
-# Check for missing values in primary key columns
-Like |> 
-  filter(is.na(PostID) | is.na(LikerID))
 ```
 
 No missing values were detected. We removed any duplicate rows so each row corresponds to a unique like event.
 
-```{r}
+```{r results='hide'}
+# Check for missing values in primary key columns
+Like |> 
+  filter(is.na(PostID) | is.na(LikerID))
+
 # .keep_all ensures other information is preserved.
 Like_tidy <- Like |>
   distinct(PostID, LikerID, .keep_all = TRUE)
@@ -123,7 +331,20 @@ Each row now is a unique user liking a post.
 ```{r echo=FALSE}
 htmltools::div(
   style = "zoom: 0.8;",
-  datatable(Like_tidy)
+  datatable(Like_tidy,
+            options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+        )
+      )
+    )
+  )
 )
 ```
 
@@ -147,27 +368,44 @@ No duplicated rows or missing values were found. Each row is a single login even
 ```{r echo=FALSE}
 htmltools::div(
   style = "zoom: 0.8;",
-  datatable(Login)
+  datatable(Login,
+            options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+        )
+      )
+    )
+  )
 )
 ```
 
 ### 2.2.5 Post.csv
 
-We checked for the possible type of cases in `Post.csv`. `ViewerID` was found not belong to the type of case of "post", which means principle 1 was violated. In the missing value check, we found a missing value in the `ViewerID` column. To keep most meaningful information in that observation, we only removed the missing `ViewerID` when creating a new tibble for `PostID` \* `ViewerID`.
+We checked for the possible type of cases in `Post.csv`. `ViewerID` was found not belong to the type of case of "post" (as it is an attribute of a viewer rather than a post), which means principle 1 was violated. 
 
-```{r}
+```{r results='hide'}
 # Check for violation (multiple views per post)
 Post |> 
   group_by(PostID) |>
   summarise(n_distinct = n_distinct(ViewerID), .groups = "drop") |>
   count(n_distinct)
+```
 
+In the missing value check, we found a missing value in the `ViewerID` column. To keep most meaningful information in that observation, we only removed the missing `ViewerID` when creating a new tibble for `PostID`\*`ViewerID`.
+
+```{r}
 # Check for missing values in primary key columns
 Post |> 
   filter(is.na(PostID) | is.na(ViewerID))
 ```
 
-The raw data set `Post.csv` was then split into two separate tibbles based on the type of cases. `Post_sub1` included information about each post, `Post_sub2` depicted how each post was viewed by a unique viewer, containing only two variables: `PostID` and `ViewerID`. `distinct()` was used on the primary key(s) to remove duplicates. `Post_sub1` was thus reduced to a parsimonious data set of 547 rows from 91031 rows.
+The raw data set `Post.csv` was then split into two separate tibbles based on the type of cases. `Post_sub1` included information about each post, `Post_sub2` depicted how each post was viewed by a unique viewer, containing only two variables: `PostID` and `ViewerID`. `distinct()` was used on the primary key `PostID` to remove duplicates. `Post_sub1` was thus reduced to a parsimonious data set of 547 rows from 91031 rows.
 
 ```{r results='hide'}
 # Splitting post and view information into 2 separate tibbles
@@ -219,7 +457,7 @@ Now for `Post_sub1`, each row is a unique post and its attributes; for `Post_sub
 
 ### 2.2.6 Presurvey.csv
 
-According to Principle 1, each type of case should have its own tibble. We first check the primary key to see whether different case types can be detected directly from the raw data. In this dataset, the primary key `UserID` does not reveal any structural differences, so we rely on inspecting the variables themselves. Based on that, we identify two distinct types of cases: group-member information and user-level information. We therefore split the dataset into two tibbles before continuing with the tidying process.
+According to Principle 1, each type of case should have its own tibble. We first check the primary key to see whether different case types can be detected directly from the raw data. In this data set, the primary key `UserID` does not reveal any structural differences, so we rely on inspecting the variables themselves. Based on that, we identify two distinct types of cases: group-member information and user-level information. We therefore split the data set into two tibbles before continuing with the tidying process.
 
 **Check the primary key**
 
@@ -253,14 +491,14 @@ htmltools::div(
 )
 ```
 
-**Exclude UserID 470 from the dataset**
+**Exclude UserID 470 from the data set**
 
 ```{r results='hide'}
 PreSurvey <- PreSurvey |> 
   filter(UserID != 470)
 ```
 
-Since we could not determine which response was valid, and keeping both would double-count this user, we excluded this user from the dataset.
+Since we could not determine which response was valid, and keeping both would double-count this user, we excluded this user from the data set.
 
 **Check the primary key again**
 
@@ -281,10 +519,8 @@ PreSurvey |>
 
 This step checks whether any rows have a missing `UserID`. A primary key cannot contain missing values, so this helps confirm that all cases are properly identified before we continue with further tidying.
 
-::: callout-warning
-## Important
-
-Although checking the primary key in the raw data does not reveal different types of cases, applying Principle 2 later will change the row structure through pivoting, which in turn alters the primary key and exposes distinct case types. To keep the workflow cleaner and avoid unnecessary complexity after pivoting, we identify these case types in advance and split the dataset before further tidying.
+::: callout-important
+Although checking the primary key in the raw data does not reveal different types of cases, applying Principle 2 later will change the row structure through pivoting, which in turn alters the primary key and exposes distinct case types. To keep the workflow cleaner and avoid unnecessary complexity after pivoting, we identify these case types in advance and split the data set before further tidying.
 :::
 
 **Select related columns based on type of case (1)**
@@ -296,7 +532,7 @@ PreSurvey_sub1 <- PreSurvey |>  select(
 )
 ```
 
-Since the primary key didn’t tell us anything about different case types, we looked directly at the variables themselves. From their structure, we could clearly see that the dataset mixes group-member information with user-level information. Based on this distinction, and following Principle 1, we separated the group-member variables into `PreSurvey_sub1`.
+Since the primary key didn’t tell us anything about different case types, we looked directly at the variables themselves. From their structure, we could clearly see that the data set mixes group-member information with user-level information. Based on this distinction, and following Principle 1, we separated the group-member variables into `PreSurvey_sub1`.
 
 ```{r echo=FALSE}
 htmltools::div(
@@ -358,14 +594,15 @@ Since both resulting tibbles still keep `UserID` as the primary key, we do not r
 
 ### 2.2.7 User.csv
 
-**Step 1.** According to the cases type identifying principle: Every variable in the primary key and every combination of these variables may represent a different type of case. The primary key for User table is UserID, and the User case type can be identified.
+**Step 1.** According to the cases type identifying principle: every variable in the primary key and every combination of these variables may represent a different type of case. The primary key for `User` is `UserID`, and the `User` case type could be identified.
 
-```{r}
-User |> count(UserID) |> 
+```{r results='hide'}
+User |> 
+  count(UserID) |> 
   filter(n > 1)
 ```
 
-But after applying common sense, we can find that Condition is a characteristic of Group_nr. Therefore, our preliminary assumption is the the User table includes two cases types: User and Group. **Step 2** is to conduct a uniqueness check.
+But after applying common sense, we found that `Condition` is a characteristic of `Group_nr`. Therefore, our preliminary assumption is `User` table includes two cases types: `User` and `Group`. **Step 2** was to conduct a uniqueness check.
 
 ```{r}
 User |>
@@ -410,9 +647,9 @@ User |>
 | User | ID_nr_Vragenlijst, Group_nr, Condition | student characteristics mix with relevant group group characteristics | yes |
 | Group | Condition | Fixed group characteristics | yes |
 
-**Step 3.** According to the rule: The variable belongs to the simplest type of cases (identified by fewest variables) satisfying the check in Step 2. The primary key for the Person case type is UserID (1 variable), and the primary key for the Group case type is Group_nr (1 variable). Regarding Condition: It is unique with respect to UserID It is also unique with respect to Group_nr However, based on semantics and domain knowledge, it clearly represents a group-level condition This attribute can therefore be placed in the smaller Group_nr table, avoiding repeated information in the User table According to the case-type rules, Condition belongs to the Group case type, which indicates that the User table contains a mixed-in Group-level case type. Consequently, a separate groups tibble should be created.
+**Step 3.** According to the rule: the variable belongs to the simplest type of cases (identified by fewest variables) satisfying the check in **Step 2**. The primary key for `Person` case type is `UserID` (1 variable), and the primary key for the `Group` case type is `Group_nr` (1 variable). Regarding `Condition`: it is unique with respect to `UserID`, and it is also unique with respect to `Group_nr`. However, based on semantics and domain knowledge, it clearly represented a group-level condition. This attribute can therefore be placed in the smaller `Group_nr` table, avoiding repeated information in `User` table. According to the case-type rules, `Condition` belongs to the `Group` case type, which indicates that the `User` table contains a mixed-in group-level case type. Consequently, a separate "groups" tibble should be created.
 
-Splitting User into User_sub1 and User_sub2 based on Principle 1 User_sub1 include information of Experimental condition, Type of fake alcohol posts shown during the last three weeks of the data collection. User_sub2 include information of Users themselves including ID, Group number and Role
+Splitting `User` into `User_sub1` and `User_sub2` based on principle 1: `User_sub1` included information of experimental condition, type of fake alcohol posts shown during the last three weeks of the data collection; `User_sub2` included information of `Users` including ID, group number and role.
 
 ```{r results='hide'}
 User_sub1 <- User |> 
@@ -466,9 +703,108 @@ htmltools::div(
 
 ### 2.2.8 WeekData.csv
 
+Like `DayData`, the `WeekData` contains information per person per day, but aggregated by week. Each week, respondents completed the questionnaire on the same day, so `day_nr` values are identical for each weekly entry. The primary key is `UserID`\*`week_nr`.
+
+The variables in this data set cover the assessment of alcohol through 15 questions, as well as perceptions of the intention to consume alcohol in the upcoming week. Additionally, it includes how often the SNS app was used in the past week and how attentively it was viewed. All these variables / columns therefore refer to the person per week. It is therefore not necessary to split the data set into multiple tibbles, as principle 1 is not violated.
+
+To determine the primary key of the week data set, roughly the same steps were followed as for the day data. First, we looked at how many people were in the data set, which was 270. Then we checked how many days were included in the data set, which was 6, and also how many weeks were included, which was 6 as well. The day numbers were the same for each week: day 8, day 15, day 22, day 29, day 36, and day 43. Since these days are the same for each week number (for example, every week 1 has day number 8), `day_nr` is by reasoning not part of the primary key.
+
+```{r results='hide'}
+
+WeekData_tidy <- WeekData
+
+#check how many persons are included in the WeekData.
+WeekData_tidy |> 
+  count(UserID) |> 
+  nrow()
+# there are 270 rows, so 270 unique persons. 
+
+#check how many days are included in the WeekData.
+WeekData_tidy |> 
+  count(day_nr) |> 
+  nrow()
+#there are 6 rows, so 6 days.
+
+#check how many weeks are included in the WeekData.
+WeekData_tidy |> 
+  count(week_nr) |> 
+  nrow()
+#there are 6 rows, so 6 weeks.
+
+#we want to have an overview of the days and frequency.
+WeekData_tidy |> 
+  count(day_nr)
+# this shows there are 6 days (8, 15, 22, 29, 36, 43), and 200+ rows per day.
+
+#we want to have an overview of the weeks and frequency.
+WeekData_tidy |> 
+  count(week_nr)
+# this shows there are 6 weeks (1,2,3,4,5,6), and 200+ rows per week
+
+#this means the values in the day_nr are the same for every week. 
+
+```
+
+Next, we looked at the number of rows that would remain after counting by `UserID` and `week_nr`. A closer look at the duplicates per person and week revealed, similar to the daily data set, that several respondents had completed the questionnaire more than once for the same week. The differences were also comparable: some entries were initially incomplete and later filled in, or values had changed between submissions. Therefore, we again decided to retain only the completed and most recent rows, excluding the others.
+
+```{r results='hide'}
+
+#to check whether the primary key is week_nr * UserID (since the day_nr is the same for all week_nr per person)
+WeekData_tidy|> 
+  count(UserID, week_nr) |>  
+  filter(n > 1) |> 
+  nrow()
+#results in 26 rows. 
+
+#to see the duplicates as done in the tutorial.
+WeekData_tidy |>
+  group_by(UserID, week_nr) |>
+  mutate(n_identical = n()) |> 
+  filter(n_identical > 1) |>
+  arrange( UserID, week_nr)|> 
+  ungroup() |>
+  slice(1:6)
+#now we see that some people also have filled in the same week per person on different days. 
+
+#we can not use the persons who haven't finished the questionnaire. So we delete them from the data set.
+WeekData_tidy <- WeekData_tidy |>
+  filter(Finished == 1)
+
+#to keep only the most recent rows. 
+WeekData_tidy <- WeekData_tidy |>
+  mutate(EndDate = as.POSIXct(EndDate)) |>
+  group_by(UserID, week_nr) |>
+  arrange(desc(EndDate)) |>
+  slice(1) |>
+  ungroup()
+
+#check again the number of multiple rows per week per person
+WeekData_tidy|> 
+  count(UserID, week_nr) |> 
+  filter(n > 1) |> 
+  nrow()
+#results in 0 rows. 
+```
+
+After this was carried out, the check for the primary key returned 0 rows, which means we can conclude that the primary key for the Week Data set is `UserID`\*`week_nr`. Next, we checked whether there were any missing values in the primary keys. For the week data, there were no missing values in the `UserID` and `week_nr`.
+
+```{r results='hide'}
+
+#checking for missing values in primary key. 
+WeekData_tidy |> 
+  filter(is.na(UserID))
+#this results in 0 rows.
+
+#checking for missing values in primary key. 
+WeekData_tidy |> 
+  filter(is.na(week_nr))
+#this results in 0 rows.
+
+```
+
 ## 2.3 Principle 2: Each observation must have its own row
 
-**Example: PreSurvey_sub1**
+### 2.3.1 Example 1: PreSurvey_sub1
 
 According to Principle 2, each observation should appear in its own row. In the `PreSurvey_sub1` tibble, a single row still contained multiple `GroupMember\_` responses from the same user, so several observations were packed together. To address this, we used `pivot_longer()` to pull these member-level variables out into separate rows. After pivoting, each row represents one clear `UserID`\*`Column` observation. We then looked at the new primary key `UserID`\*`Column` to make sure there were no duplicates or missing values.
 
@@ -523,6 +859,90 @@ PreSurvey_sub1 |>
 ```
 
 This step checks whether any `UserID`\*`Column` keys are missing, ensuring that every long-format row is a valid observation.
+
+### 2.3.2 Example 2: DayData (Exploration)
+
+For principle 2, that each observation must have its own row, `DayData` is not in violation. The repeated information, for example the values in `day_nr`, is necessary and dependent on the `UserID`. There are no columns that are actually values.
+
+::: callout-note
+This is a brief exploratory analysis that was ultimately not used, but which does show how we reasoned.
+:::
+
+However, it was briefly explored whether the 9 columns (`Alc_Occ, Alc_Freq, Alc_Soc, Sport_Occ, Sport_Freq, Sport_Soc, Snack_Occ, Snack_Freq, and Snack_Soc`) could be tidied up, since `Occ`, `Freq`, and `Soc` all measure the same concept, only varying by activity. Therefore, the column names were moved into rows using `pivot_longer()` as first step. Because some values in these columns contain text, for example, respondents sometimes added words to their answers (e.g., “3 glasses”), it was first necessary to try converting them into character type. For this exploration, a temporary new data set was created, namely `PersonDayActivity`.
+
+```{r results='hide'}
+#some people typed something in the values (e.g. 3 glazen, of 3 uur). First, we have to make these to characters again. 
+DayData_tidy <- DayData_tidy |>  
+  mutate(
+    Alc_Occ = as.character (Alc_Occ),
+    Alc_Freq = as.character (Alc_Freq),
+    Alc_Soc = as.character (Alc_Soc),
+    Sport_Occ = as.character (Sport_Occ),
+    Sport_Freq = as.character (Sport_Freq),
+    Sport_Soc = as.character (Sport_Soc),
+    Snack_Occ = as.character (Snack_Occ),
+    Snack_Freq = as.character (Snack_Freq),
+    Snack_Soc = as.character (Snack_Soc)
+    )
+                  
+#now they are al characters, we make the columns variables into values of the variable "Activity". 
+PersonDayActivity <- DayData_tidy |>  
+  pivot_longer(
+    cols = c(Alc_Occ, Alc_Freq, Alc_Soc,
+    Sport_Occ, Sport_Freq, Sport_Soc,
+    Snack_Occ, Snack_Freq, Snack_Soc), 
+      names_to = 'Activity', 
+      values_to = 'Value')
+                 
+```
+
+At this point, the column names were in the rows, as you would do when addressing principle 2. However, it was still necessary to separate the activity from the `Occ`, `Freq`, and `Soc` values. This was done using the fuction `pivot_longer_delim`.
+
+```{r results='hide'}
+#seperating the activity from the measurement.
+PersonDayActivity <- PersonDayActivity |>  
+  separate_wider_delim(
+  cols = Activity,
+  delim = "_",
+  names = c("Activity", "Measure"))
+```
+
+After that, the `Occ`, `Freq`, and `Soc` values were returned to separate columns.
+
+```{r results='hide'}
+PersonDayActivity <- PersonDayActivity |> 
+  pivot_wider(
+    names_from = Measure, values_from = Value)
+```
+
+This resulted in the following `PersonDayAcitcity` table. Note that an NA always appears in the `Freq` and `Soc` columns when the respondent selected 1 for `Occ` (1 means no alcohol, did not exercise, or did not snack).
+
+```{r echo = FALSE}
+htmltools::div(
+  style = "zoom: 0.8;",
+  datatable(PersonDayActivity |> 
+    select(UserID, day_nr, Activity, Occ, Freq, Soc)))
+```
+
+The problem is that the `Activity` column at this moment contains values that actually represent separate variables or columns. Because of this, this exploration remains only an exploratory step, and we will not use this approach of trying to turn the rows into separate observations in the tidied data set. However, it does show how a potential violation of principle 2 could have been resolved, although this was not actually the case.
+
+Long story short, there is therefore no violation of principle 2. Subsequently, the column values were converted back to numbers.
+
+```{r results='hide'}
+#remake these values from characters to numbers again. 
+DayData_tidy <- DayData_tidy |> 
+  mutate(
+    Alc_Occ = as.numeric(Alc_Occ),
+    Alc_Freq = as.numeric(Alc_Freq),
+    Alc_Soc = as.numeric(Alc_Soc),
+    Sport_Occ = as.numeric(Sport_Occ),
+    Sport_Freq = as.numeric(Sport_Freq),
+    Sport_Soc = as.numeric(Sport_Soc),
+    Snack_Occ = as.numeric(Snack_Occ),
+    Snack_Freq = as.numeric(Snack_Freq),
+    Snack_Soc = as.numeric(Snack_Soc)
+  )
+```
 
 ## 2.4 Principle 3: Each variable must have its own column
 
@@ -687,7 +1107,7 @@ htmltools::div(
 
 ### 2.5.1 Example 1: PreSurvey_sub2
 
-According to Principle 4, each cell should contain only one value. In the `PreSurvey_sub2` tibble, the variable `Alc_Freq_Normal` stored both a numeric code and a descriptive label in the same cell, which mixes two pieces of information. To fix this, we separated the numeric part from the text label and converted the code into an integer. After this step, each cell holds only a single value, and the variable structure follows Principle 4.
+According to principle 4, each cell should contain only one value. In the `PreSurvey_sub2` tibble, the variable `Alc_Freq_Normal` stored both a numeric code and a descriptive label in the same cell, which mixes two pieces of information. To fix this, we separated the numeric part from the text label and converted the code into an integer. After this step, each cell holds only a single value, and the variable structure follows principle 4.
 
 **Separate code and label in Alc_Freq_Normal**
 
@@ -701,7 +1121,7 @@ PreSurvey_sub2 <- PreSurvey_sub2 |>
   ) 
 ```
 
-This step splits the `Alc_Freq_Normal` column into two fields: the numeric code and the text label. We use `separate_wider_delim()` to detect the “`.`” delimiter and pull the two parts apart, so that each cell contains only one piece of information as required by Principle 4.
+This step splits the `Alc_Freq_Normal` column into two fields: the numeric code and the text label. We use `separate_wider_delim()` to detect the “`.`” delimiter and pull the two parts apart, so that each cell contains only one piece of information as required by principle 4.
 
 ```{r echo=FALSE}
 htmltools::div(
@@ -745,7 +1165,7 @@ This step checks whether any rows in `PreSurvey_sub2` have a missing `UserID`. S
 
 ### 2.5.2 Example 2: User_sub1
 
-After checking the variables in Group(User_sub1) tibble, we found that the Condition column contains more than one piece of information, which violates the principle 4. Therefore, we split the variable in Condition column into 2 variables: "Valence" and "Sociality" based on Principle 4.
+After checking the variables in `User_sub1`, we found that `Condition` contains more than one piece of information, which violated principle 4. Therefore, we split the variable `Condition` into 2 variables: `Valence` and `Sociality` based on principle 4.
 
 ```{r echo=FALSE}
 User_sub1 <- User_sub1 |>  separate_wider_delim(
@@ -806,7 +1226,7 @@ Post_sub2 |>
 **User_sub1**
 
 ```{r}
-user_sub_1 |> 
+User_sub1 |> 
   filter(is.na(Group_nr))
 ```
 
