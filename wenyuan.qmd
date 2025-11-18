@@ -106,23 +106,15 @@ To decide if principle 1 was violated in each data set, we used `group_by()`, `s
 
 ### 2.2.1 Comment.csv
 
-<<<<<<< HEAD
 The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by (`post_id`, `commenter_id`, `comment_time`).We assessed whether there were duplicate rows for the same comment event, and also whether attributes such as `comment_content` vary within the same case (i.e., for the same `post_id`, `commenter_id`, `comment_time`).
 
 Principle 1 was not violated in this set as all variables belong to the same type of case.
-=======
-The type of case in this data set is an individual comment made by a user on a post at a certain time, defined by (`post_id`, `commenter_id`, `comment_time`). We counted (`post_id`, `commenter_id`, `comment_time`) to check for duplicate rows, which would not violate Principle 1, but multiple observations for a case would influence the clarity.
->>>>>>> cd2a3967449fe57710c90937091230b0ff11efc3
 
 ```{r}
 # Type of case check
 comment |> 
   group_by(post_id, comment_time, commenter_id) |> 
-<<<<<<< HEAD
   summarise(n_distinct = n_distinct(comment_content), .groups = "drop") |> 
-=======
-  summarise(n_distinct = n_distinct(post_id, comment_time, commenter_id, comment_content), .groups = "drop") |> 
->>>>>>> cd2a3967449fe57710c90937091230b0ff11efc3
   count(n_distinct)
 
 # Check for duplicates
@@ -134,11 +126,7 @@ comment_dupes <- comment |>
 comment |> semi_join(comment_dupes, by = c("post_id", "commenter_id", "comment_time"))
 ```
 
-<<<<<<< HEAD
 To ensure that each comment event appears only once, we removed duplicates and retain all available information for the first occurrence using `.keep_all = TRUE` in `distinct()`. This preserves additional columns associated with each comment, which may be required elsewhere in analysis.
-=======
-Duplicate rows were found, they should be removed so each row represents a unique comment event.
->>>>>>> cd2a3967449fe57710c90937091230b0ff11efc3
 
 ```{r}
 # Use .keep_all = TRUE so that, for each group of duplicated identifiers, we retain all columns from the first occurrence and preserve other information in the tibble.
@@ -152,21 +140,9 @@ Each row is now an individual comment action (by a commenter, on a post, at a ti
 
 ### 2.2.3 Like.csv
 
-<<<<<<< HEAD
 The type of case in `Like.csv` is a unique like event, defined by (`post_id`, `liker_id`). It does not violate principle 1 as well, we checked for duplicate (`post_id`, `liker_id`) pairs to ensure data set clarity.
 
 ```{r}
-=======
-The type of case in `Like.csv` is a unique like event, defined by (`post_id`, `liker_id`). It does not violate principe 1 as well, we check for duplicate (`post_id`, `liker_id`) pairs to ensure data set clarity.
-
-```{r}
-# Type of case check
-like |> 
-  group_by(post_id, liker_id) |> 
-  summarise(n_distinct = n_distinct(post_id, liker_id), .groups = "drop") |> 
-  count(n_distinct)
-
->>>>>>> cd2a3967449fe57710c90937091230b0ff11efc3
 # Check for duplicates
 like_dupes <- like |>
   count(post_id, liker_id) |>
@@ -188,43 +164,21 @@ Each row now is a unique user liking a post.
 
 ### 2.2.4 Login.csv
 
-<<<<<<< HEAD
 In this data set, the case type is a login event, defined by (`user_id`, `user_login_time`). Principle 1 was not violated here, but we checked for duplicate login events per user to prevent further analytic errors.
 
 ```{r}
-=======
-In this data set, the case type is a login event, defined by (`user_id`, `user_login_time`). Priciples 1 is not violated here, but We checked for duplicate login events per user to prevent further analytic errors.
-
-```{r}
-# Type of case check
-login |> 
-  group_by(user_id, user_login_time) |> 
-  summarise(n_distinct = n_distinct(user_id, user_login_time), .groups = "drop") |> 
-  count(n_distinct)
-
->>>>>>> cd2a3967449fe57710c90937091230b0ff11efc3
 # Check for duplicates
 login_dupes <- login |>
   count(user_id, user_login_time) |>
   filter(n > 1)
 ```
 
-<<<<<<< HEAD
 No duplicated rows were found. Each row is a single login event, representing a login by a user at a specific time.
-=======
-No duplicated rows were found. Each row is a single login event,representing a login by a user at a specific time.
->>>>>>> cd2a3967449fe57710c90937091230b0ff11efc3
 
 ### 2.2.5 Post.csv
 
 We checked for the possible type of cases in `Post.csv`.`viewer_id` was found not belong to the type of case of "post", which means principle 1 was violated.
 
-<<<<<<< HEAD
-=======
-
-We checked for the possible type of cases in `Post.csv`.`viewer_id` was found not belong to the type of case of "post".
-
->>>>>>> cd2a3967449fe57710c90937091230b0ff11efc3
 ```{r}
 # Check for violation (multiple views per post)
 post |> 
