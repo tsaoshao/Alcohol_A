@@ -23,10 +23,11 @@ All eight data sets were imported with `read_csv` under `tidyverse` and made use
 ```{r, results='hide', message=FALSE, warning=FALSE}
 #| label: data-importing
 
-# tidyverse for data wrangling; DT for table insertion
+# tidyverse for data wrangling; DT for table insertion; htmltools for table aesthetics; DiagrammeR for making table relation figures
 library(tidyverse)
 library(DT)
 library(htmltools)
+library(DiagrammeR)
 
 # Import and rename data sets for clarity
 Comment <- read_csv("AlcoholData/Comment.csv")
@@ -644,18 +645,21 @@ User |>
   )
 ```
 
-| Case type | Variables | Notes | Separate tibble? |
-|----|----|----|----|
-| User | ID_nr_Vragenlijst, Group_nr, Condition | student characteristics mix with relevant group group characteristics | yes |
-| Group | Condition | Fixed group characteristics | yes |
++-----------+----------------------------------------+-----------------------------------------------------------------------+------------------+
+| Case type | Variables                              | Notes                                                                 | Separate tibble? |
++===========+========================================+=======================================================================+==================+
+| User      | ID_nr_Vragenlijst, Group_nr, Condition | student characteristics mix with relevant group group characteristics | yes              |
++-----------+----------------------------------------+-----------------------------------------------------------------------+------------------+
+| Group     | Condition                              | Fixed group characteristics                                           | yes              |
++-----------+----------------------------------------+-----------------------------------------------------------------------+------------------+
 
 **Step 3.** According to the rule: the variable belongs to the simplest type of cases (identified by fewest variables) satisfying the check in **Step 2**. The primary key for `Person` case type is `UserID` (1 variable), and the primary key for the `Group` case type is `Group_nr` (1 variable). Regarding `Condition`: it is unique with respect to `UserID`, and it is also unique with respect to `Group_nr`. However, based on semantics and domain knowledge, it clearly represented a group-level condition. This attribute can therefore be placed in the smaller `Group_nr` table, avoiding repeated information in `User` table. According to the case-type rules, `Condition` belongs to the `Group` case type, which indicates that the `User` table contains a mixed-in group-level case type. Consequently, a separate "groups" tibble should be created.
 
-Splitting `User` into `User_sub1` and `User_sub2` based on principle 1: `User_sub1` included information of experimental condition, type of fake alcohol posts shown during the last three weeks of the data collection; `User_sub2` included information of `Users` including ID, group number and role.
+Splitting `User` into `User_sub1` and `User_sub2` based on principle 1: `User_sub1` included information of experimental condition, type of fake alcohol posts shown during the last three weeks of the data collection; `User_sub2` included information of `Users` including user ID, questionnaire ID, question group number and role.
 
 ```{r results='hide'}
 User_sub1 <- User |> 
-  distinct(Group_nr, Condition) 
+  select(Group_nr, Condition) 
 ```
 
 ```{r echo=FALSE}
@@ -1223,7 +1227,9 @@ htmltools::div(
 
 ## 3.1 Primary Key
 
-**Comment.csv**
+Before detecting table relations by foreign key, we checked uniqueness for primary keys in each tidied tibbles.
+
+**Comment_tidy**
 
 ```{r}
 Comment_tidy |> 
@@ -1231,7 +1237,15 @@ Comment_tidy |>
   filter(n > 1)
 ```
 
-**Like.csv**
+**DayData_tidy**
+
+```{r}
+DayData_tidy |> 
+  count(UserID, day_nr) |> 
+  filter(n > 1)
+```
+
+**Like_tidy**
 
 ```{r}
 Like_tidy |> 
@@ -1239,7 +1253,7 @@ Like_tidy |>
   filter(n > 1)
 ```
 
-**Login.csv**
+**Login**
 
 ```{r}
 Login |> 
@@ -1263,11 +1277,26 @@ Post_sub2 |>
   filter(n > 1)
 ```
 
+**PreSurvey_sub1**
+
+```{r}
+PreSurvey_sub1 |> 
+  count(UserID, Member) |> 
+  filter(n > 1)
+```
+
+**PreSurvey_sub2**
+
+```{r}
+PreSurvey_sub2 |> 
+  count(UserID) |> 
+  filter(n > 1)
+```
+
 **User_sub1**
 
 ```{r}
 User_sub1 |> 
-  filter(is.na(Group_nr)) |> 
   count(Group_nr) |> 
   filter(n > 1)
 ```
@@ -1280,9 +1309,17 @@ User_sub2 |>
   filter(n > 1)
 ```
 
+**WeekData_tidy**
+
+```{r}
+WeekData_tidy |> 
+  count(UserID, week_nr) |> 
+  filter(n > 1)
+```
+
 ## 3.2 Check for Foreign Key by Detecting Shared Columns
 
-3.2.1 Post-related foreign keys
+### 3.2.1 Post-related Foreign Keys
 
 ```{r}
 Comment_tidy |> anti_join(Post_sub1, by = "PostID")
@@ -1297,7 +1334,7 @@ Post_sub2 |>
   anti_join(Post_sub1, by = "PostID")
 ```
 
-3.2.2 User-related foreign keys
+### 3.2.2 User-related Foreign Keys
 
 ```{r}
 Comment_tidy |>
@@ -1325,17 +1362,16 @@ PreSurvey_sub2 |> anti_join(User_sub2, by = "UserID" )
 ```
 
 ```{r}
-DayData |>
-  filter(!is.na(UserID)) |> 
+DayData_tidy |>
   anti_join(User_sub2, by = "UserID")
 ```
 
 ```{r}
-WeekData |>
+WeekData_tidy |>
   anti_join(User_sub2, by = "UserID")
 ```
 
-3.2.3 Group membership foreign key
+### 3.2.3 Group-membership-related Foreign Key
 
 ```{r}
 User_sub2 |>
@@ -1376,6 +1412,48 @@ User_sub2 |>
 +-------------------+----------------------------------+---------------------------------+
 | WeekData_tidy     | UserID, week_nr                  | UserID –\> User_sub2            |
 +-------------------+----------------------------------+---------------------------------+
+
+```{r echo=FALSE}
+# After installing the DiagrammeR package, load it.
+DiagrammeR::grViz("
+digraph database {
+graph [
+rankdir = 'LR'
+];
+node [
+fontsize = '16'
+shape = 'ellipse'
+];
+edge [
+];
+'node1' [
+label = 'Student | <f1> student | <f2> neighbourhood | age | sex |smoking_at_home | smoking_parents | smoking_siblings'
+shape = 'record'
+];
+'node2' [
+label = 'Neighbourhood | <f1> neighbourhood | schooldist | hoodname'
+shape = 'record'
+];
+'node3' [
+label = 'StudentBestfriend | <f1> student | bestfriend | from | to'
+shape = 'record'
+];
+'node4' [
+label = 'StudentWave | <f1> student | <f2> wave | alcohol | cannabis | money | romantic'
+shape = 'record'
+];
+'node5' [
+label = 'StudentWaveFriend | <f1> student | <f2>wave | friend'
+shape = 'record'
+];
+'node2':f1 -> 'node1':f2;
+'node1':f1 -> 'node3':f1;
+'node1':f1 -> 'node4':f1;
+'node1':f1 -> 'node5':f1;
+'node4':f2 -> 'node5':f2;
+}
+")
+```
 
 ::: callout-note
 `User_sub1` contains a unique row per experimental group and is identified by the primary key `Group_nr`. Since this table does not reference any other entity, it does not contain foreign keys.
