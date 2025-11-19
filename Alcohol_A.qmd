@@ -103,14 +103,14 @@ For checking the primary key, we first looked at how many people were in `DayDat
 
 DayData_tidy <- DayData
 
-#check how many rows in the daydataset.
+#check how many rows in the DayData.
 nrow(DayData_tidy)
-#so now we know there are 10019 rows in the daydataset. 
+#so now we know there are 10019 rows in the DayData. 
 
-#check how many persons are included in the daydataset.
+#check how many persons are included in the DayData.
 DayData_tidy |> 
   count(UserID)
-#based on this we can say there are 282 persons in the daydataset (nrows = 282)
+#based on this we can say there are 282 persons in the DayData (nrows = 282)
 
 #finding out primary key
 DayData_tidy|> 
@@ -118,7 +118,7 @@ DayData_tidy|>
   filter(n > 1) 
 #here we found that there are multiple rows per person per day. 
 
-#check how many multiple rows per person per day are in the dataset.
+#check how many multiple rows per person per day are in the data set.
 DayData_tidy|> 
   count(UserID, day_nr,) |>  
   filter(n > 1) |> 
@@ -158,11 +158,11 @@ To correct this, the incomplete questionnaires were excluded. Another check was 
 
 ```{r}
 
-#we can not use the persons who haven't finished the questionnaire. So we delete them from the dataset.
+#we can not use the persons who haven't finished the questionnaire. So we delete them from the data set.
 DayData_tidy <- DayData_tidy |>
   filter(Finished == 1)
 
-#recheck how many multiple rows per person per day are in the dataset.
+#recheck how many multiple rows per person per day are in the data set.
 DayData_tidy|> 
   count(UserID, day_nr,) |>  
   filter(n > 1) |> 
@@ -234,7 +234,7 @@ Next, we checked again how many duplicate rows remained based on `UserID` and `d
 
 ```{r}
 
-#check how many multiple rows per person per day are in the dataset.
+#check how many multiple rows per person per day are in the data set.
 DayData_tidy|> 
   count(UserID, day_nr) |>  
   filter(n > 1) |> 
@@ -265,7 +265,7 @@ DayData_tidy <- DayData_tidy |>
   slice(1) |>
   ungroup()
 
-#check again how many multiple rows per person per day are in the dataset.
+#check again how many multiple rows per person per day are in the data set.
 DayData_tidy |> 
   count(UserID, day_nr) |>  
   filter(n > 1) |> 
@@ -1339,14 +1339,10 @@ For each candidate foreign key, we verified referential integrity: every foreign
 ```{r}
 # Ensure all PostID values in Comment_tidy have a corresponding PostID in Post_sub1
 Comment_tidy |> anti_join(Post_sub1, by = "PostID")
-```
 
-```{r}
 # Ensure all PostID values in Like_tidy have a corresponding PostID in Post_sub1
 Like_tidy |> anti_join(Post_sub1, by = "PostID" )
-```
 
-```{r}
 # Ensure all PostID values in Post_sub2 have a corresponding PostID in Post_sub1
 Post_sub2 |>
   anti_join(Post_sub1, by = "PostID")
@@ -1360,38 +1356,26 @@ These `anti_join()` results are empty, which means every post-related foreign ke
 # Ensure all CommenterID in Comment_tidy correspond to a UserID in User_sub2
 Comment_tidy |>
   anti_join(User_sub2, by = c("CommenterID" = "UserID"))
-```
 
-```{r}
 # Ensure all LikerID in Like_tidy correspond to a UserID in User_sub2
 Like_tidy |>
   anti_join(User_sub2, by = c("LikerID" = "UserID"))
-```
 
-```{r}
 # Ensure all ViewerID in Post_sub2 correspond to a UserID in User_sub2
 Post_sub2 |>
   anti_join(User_sub2, by = c("ViewerID" = "UserID"))
-```
 
-```{r}
 # Ensure all UserID in Login correspond to a UserID in User_sub2
 Login |>
   anti_join(User_sub2, by = "UserID")
-```
 
-```{r}
 # Ensure all UserID in PreSurvey_sub1 and PreSurvey_sub2 correspond to UserID in User_sub2
 PreSurvey_sub1 |> anti_join(User_sub2, by = "UserID" )
 PreSurvey_sub2 |> anti_join(User_sub2, by = "UserID" )
-```
 
-```{r}
 # Ensure all UserID in DayData_tidy correspond to UserID in User_sub2
 DayData_tidy |> anti_join(User_sub2, by = "UserID")
-```
 
-```{r}
 # Ensure all UserID in WeekData_tidy correspond to UserID in User_sub2
 WeekData_tidy |>
   anti_join(User_sub2, by = "UserID")
@@ -1441,11 +1425,310 @@ Table relation is shown in the following table.
 +-------------------+----------------------------------+--------------------+--------------+
 
 ::: callout-note
-`User_sub1` contains a unique row per experimental group and is identified by the primary key `Group_nr`. Since this table does not reference any other entity, it does not contain foreign keys.
+1.  The `Post_sub1` table contains a unique row per post and is identified by the primary key `PostID`. Since this table does not reference any other entity, it does not contain foreign keys.
+
+Instead, `PostID` functions as a referenced primary key: it is used as a foreign key in other tables (e.g., `Like` or `Comments`) to link each like or comment to the specific post it refers to.
+
+2.  `User_sub1` contains a unique row per experimental group and is identified by the primary key `Group_nr`. Since this table does not reference any other entity, it does not contain foreign keys.
 
 Instead, `Group_nr` functions as a referenced primary key: it is used as a foreign key in the `Users` table to link each participant to the group they were assigned to.
 :::
 
+## 3.3 Example: Joining Five Tibbles
+
+Since the full data set contains many tibbles, showing all of them in one diagram would quickly become unreadable. So we selected five tibbles that cover the main types of relationships in our data. We chose `Post_sub1` as the center, because most other data sets connect to posts in some way. Then we added `Like_tidy` and `Comment_tidy` to show two different interactions with posts. We also included `User_sub2` and `PreSurvey_sub2` so we could show how user-level information links into the network.
+
+```{r echo=FALSE}
+library(DiagrammeR)
+
+DiagrammeR::grViz("
+digraph alcohol_db {
+  graph [rankdir = LR]
+
+  node [
+    shape = plaintext
+    fontname = 'Helvetica'
+  ]
+
+  # Table definitions
+  Post_sub1 [label=<
+  <TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>
+    <TR><TD BGCOLOR='black'><FONT COLOR='white'>Post_sub1</FONT></TD></TR>
+    <TR><TD PORT='PostID'><U>PostID</U></TD></TR>
+    <TR><TD>Fakepost</TD></TR>
+    <TR><TD>Alcoholpost</TD></TR>
+    <TR><TD>Alcoholpost_fake</TD></TR>
+    <TR><TD>Alcoholpost_valence</TD></TR>
+    <TR><TD>Alcoholpost_social</TD></TR>
+    <TR><TD>......</TD></TR>
+  </TABLE>>];
+
+  Comment_tidy [label=<
+  <TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>
+    <TR><TD BGCOLOR='black'><FONT COLOR='white'>Comment_tidy</FONT></TD></TR>
+    <TR><TD PORT='PostID'><U>PostID</U></TD></TR>
+    <TR><TD PORT='CommenterID'><U>CommenterID</U></TD></TR>
+    <TR><TD><U>CommentTime</U></TD></TR>
+    <TR><TD>CommentContent</TD></TR>
+  </TABLE>>];
+
+  Like_tidy [label=<
+  <TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>
+    <TR><TD BGCOLOR='black'><FONT COLOR='white'>Like_tidy</FONT></TD></TR>
+    <TR><TD PORT='PostID'><U>PostID</U></TD></TR>
+    <TR><TD PORT='LikerID'><U>LikerID</U></TD></TR>
+  </TABLE>>];
+
+  User_sub2 [label=<
+  <TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>
+    <TR><TD BGCOLOR='black'><FONT COLOR='white'>User_sub2</FONT></TD></TR>
+    <TR><TD PORT='UserID'><U>UserID</U></TD></TR>
+    <TR><TD>Group_nr</TD></TR>
+    <TR><TD>QuestionnaireID</TD></TR>
+    <TR><TD>UserRole</TD></TR>
+  </TABLE>>];
+
+  PreSurvey_sub2 [label=<
+  <TABLE BORDER='0' CELLBORDER='1' CELLSPACING='0'>
+    <TR><TD BGCOLOR='black'><FONT COLOR='white'>PreSurvey_sub2</FONT></TD></TR>
+    <TR><TD PORT='UserID'><U>UserID</U></TD></TR>
+    <TR><TD>Reward</TD></TR>
+    <TR><TD>Android</TD></TR>
+    <TR><TD>Age</TD></TR>
+    <TR><TD>Gender</TD></TR>
+    <TR><TD>......</TD></TR>
+  </TABLE>>];
+
+  # Edges: joins / relations
+  Post_sub1:PostID -> Comment_tidy:PostID;
+  Post_sub1:PostID -> Like_tidy:PostID;
+  User_sub2:UserID -> Comment_tidy:CommenterID;
+  User_sub2:UserID -> Like_tidy:LikerID;
+  User_sub2:UserID -> PreSurvey_sub2:UserID;
+}
+")
+```
+
 # 4 Data Joins
 
+## 4.1 Table Joining
+
+Upon summarising the relationships among tables in the `AlcoholData` data set, we demonstrated how we use data join functions to explore connections between users, posts, comments, likes, views, and survey records. For each join, we identify the type of relationship (one-to-one, one-to-many) and indicate the largest number of linked records per entity.
+
+### 4.1.1 Group and User Mapping
+
+```{r warning=FALSE}
+left_join(User_sub1, User_sub2, by = "Group_nr") |>
+  count(Group_nr) |> 
+  summarise(max_n = max(n))
+```
+
+After joining `User_sub1` (Group table) with `User_sub2` (User table) by `Group_nr`, the largest number of users per group is 20. Each `Group_nr` in `User_sub1` corresponds to multiple rows in `User_sub2`.
+
+**Relationship:** one-to-many (`Group` → `User`)
+
+------------------------------------------------------------------------
+
+### 4.1.2 User and Login Events
+
+```{r}
+left_join(Login, User_sub2, by = "UserID") |>
+  count(UserID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `User_sub2` (User table) with `Login` (login records) by `UserID` shows that the largest number of login records associated with a single user is 158. This means at least one user appears 158 times in the joined table:
+
+-   Each `UserID` in `User_sub2` corresponds to multiple rows in `Login`,
+-   i.e., a single user has many login events.
+
+**Relationship:** one-to-many (`User` → `Login`)
+
+------------------------------------------------------------------------
+
+### 4.1.3 Posts and Comments
+
+```{r}
+left_join(Post_sub1, Comment_tidy, by = "PostID") |>
+  count(PostID) |> 
+  summarise(max_n = max(n))
+```
+
+After joining `Post_sub1` (Post table) with `Comment_tidy` (Comment table) by `PostID`, the largest number of comment records associated with a single post is 10, indicating:
+
+-   Each `PostID` in `Post_sub1` corresponds to multiple rows in `Comment_tidy`,
+-   i.e., a single post can have many comments.
+
+**Relationship:** one-to-many (`Post` → `Comment`)
+
+------------------------------------------------------------------------
+
+### 4.1.4 Users Writing Comments
+
+```{r}
+left_join(User_sub2, Comment_tidy, by = c("UserID" = "CommenterID")) |>
+  count(UserID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `User_sub2` (User table) with `Comment_tidy` (Comment table) by matching `UserID` with `CommenterID`, the largest number of comments written by a single user is 34. Thus:
+
+-   Each `UserID` in `User_sub2` corresponds to multiple rows in `Comment_tidy`,
+-   A single user can write many comments.
+
+**Relationship:** one-to-many (`User` → `Comment`)
+
+------------------------------------------------------------------------
+
+### 4.1.5 Users and Daily Records
+
+```{r}
+left_join(User_sub2, DayData_tidy, by = "UserID") |> 
+  count(UserID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `User_sub2` (User table) with `DayData_tidy` (Daily data table) by `UserID`, the largest number of daily records associated with a single user is 66:
+
+-   Each `UserID` in `User_sub2` maps to multiple rows in `DayData_tidy`,
+-   A single user can have many daily records.
+
+**Relationship:** one-to-many (`User` → `DayData`)
+
+------------------------------------------------------------------------
+
+### 4.1.6 Posts and Likes
+
+```{r}
+left_join(Post_sub1, Like_tidy, by = "PostID") |> 
+  count(PostID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `Post_sub1` (Post table) with `Like_tidy` (Like table) by `PostID`, the largest number of likes for a single post is 122, meaning:
+
+-   A single post can receive many likes.
+
+**Relationship:** one-to-many (`Post` → `Like`)
+
+------------------------------------------------------------------------
+
+### 4.1.7 Users Giving Likes
+
+```{r}
+left_join(User_sub2, Like_tidy, by = c("UserID" = "LikerID")) |> 
+  count(UserID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `User_sub2` (User table) with `Like_tidy` (Like table) by matching `UserID` with `LikerID`, the largest number of likes given by a single user is 196, so a single user can give many likes.
+
+**Relationship:** one-to-many (`User` → `Like`)
+
+------------------------------------------------------------------------
+
+### 4.1.8 Posts and Views
+
+```{r}
+left_join(Post_sub1, Post_sub2, by = "PostID") |> 
+  count(PostID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `Post_sub1` (Post table) with `Post_sub2` (View table) by `PostID`, the relationship is one-to-many, as each post can be viewed many times.
+
+**Relationship:** one-to-many (`Post` → `View`)
+
+------------------------------------------------------------------------
+
+### 4.1.9 Users Viewing Posts
+
+```{r}
+left_join(User_sub2, Post_sub2, by = c("UserID" = "ViewerID")) |> 
+  count(UserID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `User_sub2` (User table) with `Post_sub2` (View table) by matching `UserID` with `ViewerID`, the largest number of views made by a single user is 487, which represents a single user can view many posts.
+
+**Relationship:** one-to-many (`User` → `View`)
+
+------------------------------------------------------------------------
+
+### 4.1.10 Users and Friend Nominations
+
+```{r}
+left_join(User_sub2, PreSurvey_sub1, by = "UserID") |>
+  count(UserID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `User_sub2` (User table) with `PreSurvey_sub1` (Friend nomination table) by `UserID`, the largest number of nominated friends associated with a single user is 20, which represents a single user can nominate many members.
+
+**Relationship:** one-to-many (`User` → `Friend Nomination`)
+
+------------------------------------------------------------------------
+
+### 4.1.11 Users and Survey Records (Wide Format)
+
+```{r}
+left_join(User_sub2, PreSurvey_sub2, by = "UserID") |>
+  count(UserID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `User_sub2` (User table) with `PreSurvey_sub2` (One-row-per-user survey) by `UserID`, each user appears at most once, which means each user maps to one survey record.
+
+**Relationship:** one-to-one (`User` ↔ `Survey (Wide)`)
+
+------------------------------------------------------------------------
+
+### 4.1.12 Users and Weekly Data
+
+```{r}
+left_join(User_sub2, WeekData, by = "UserID") |> 
+  count(UserID) |> 
+  summarise(max_n = max(n))
+```
+
+Joining `User_sub2` (User table) with `WeekData` by `UserID`, each user appears multiple times if there are multiple weeks, which means single user can have many weekly records.
+
+**Relationship:** one-to-many (`User` → `WeekData`)
+
+## 4.2 Conceptual Overview for Visualisations
+
+Below, we provide a conceptual overview of how tables are combined to answer individual research questions in our group.
+
+### 4.2.1 Individual Research Questions
+
+-   Wenyuan: Does seeing alcohol posts from friends influence how often students drink alone vs. socially?
+
+-   Kainan: How do descriptive norms relate to alcohol use among students, and does this relationship depend on group closeness?
+
+-   Maartje: To what extent does seeing positive or negative valenced posts about alcohol affect the daily frequency of alcohol consumption, and to what extent is this effect moderated or amplified by personality traits (Big Five) and loneliness?
+
+-   Xiaoya: Does students’ daily alcohol consumption change after exposure to researcher-generated posts with different valence (positive vs. negative) and social context (social vs. non-social), and is this effect moderated by students’ relationship closeness within their group?
+
+### 4.2.2 Conceptual Overview
+
+**Step 1** Build a user–group background data set (used by all RQs, especially Kainan and Xiaoya) Start from `User_sub2` (User) as the central participant table. Join `User_sub1` (Group) to `User_sub2` by `Group_nr`. This attaches the experimental condition (`Valence`, `Sociality`) to each user. Join `PreSurvey_sub2` to `User_sub2` by `UserID`. This adds user-level baseline measures such as personality traits, loneliness, and alcohol-related beliefs. The result is a user-level data set where each row represents one participant with their group, condition, and individual characteristics. This data set provides the background variables used, for example, in: Kainan’s RQ (descriptive norms and group closeness as predictors or moderators) Maartje’s RQ (personality and loneliness as moderators) Xiaoya’s RQ (group closeness derived from pre-survey measures plus group condition) If we need detailed group-member ratings (e.g., pairwise closeness within groups), we conceptually join `PreSurvey_sub1` to this structure via `UserID` (and possibly reshape by Member) to derive group-level closeness indicators.
+
+**Step 2** Add daily and weekly alcohol consumption (used by Wenyuan, Maartje, Xiaoya, and Kainan) For analyses at the daily level (Wenyuan, Maartje, Xiaoya), we join `DayData_tidy` to the user–group data set by `UserID`. This creates a panel structure where each row is a user-day, containing daily alcohol consumption, drinking context (alone vs. social), plus all user-level and group-level variables from Step 1. For analyses focusing on weekly patterns (e.g., Kainan’s descriptive norms over weeks), we instead join `WeekData_tidy` to the user–group data set by `UserID`, creating a user-week structure.
+
+**Step 3** Construct exposure to posts (central for Wenyuan, Maartje, and Xiaoya) To represent what alcohol-related content participants were exposed to, we start from `Post_sub2` (one row per view event: `ViewerID` saw `PostID`). Join `Post_sub2` with `User_sub2` by `ViewerID` = `UserID` to link each view to a user. Join Post_sub2 with Post_sub1 by `PostID` to attach post attributes, including whether the post is alcohol-related, its valence (positive vs. negative), and social context (social vs. non-social, or whether it is researcher-generated). If we want to incorporate engagement rather than mere exposure, we conceptually extend this exposure data set by joining: `Like_tidy` on (`PostID`, `UserID`/`LikerID`) to mark which viewed posts were liked. `Comment_tidy` on (`PostID`, `UserID`/`CommenterID`) to mark posts that were commented on and to count or analyse comments. The resulting exposure data set can then be aggregated to the user-day or user-week level (e.g., number of positive/social alcohol posts viewed per day).
+
+**Step 4** Link exposure to drinking outcomes over time (directly addresses Wenyuan, Maartje, Xiaoya RQs) To relate exposure to daily alcohol consumption, we conceptually align the exposure data set (Step 3) with `DayData_tidy` (Step 2): We aggregate the exposure data per `UserID` and `day_nr` (e.g., number of positive vs. negative, social vs. non-social posts viewed on that day). Then we join this aggregated exposure table to the user-day panel (`User` + `Group` + `DayData_tidy`) by `UserID` and the corresponding day variable. This combined user-day data set allows us to: For Wenyuan’s RQ: Test whether more exposure to positive or social alcohol-related posts is associated with higher alcohol consumption over time and whether it affects the relative frequency of drinking alone vs. socially (using `DayData_tidy` context variables). For Maartje’s RQ: Examine whether the number of positive vs. negative alcohol posts seen on a day predicts that day’s drinking frequency, and whether this association is moderated by personality traits and loneliness (brought in from `PreSurvey_sub2`). For Xiaoya’s RQ: Focus specifically on exposure to researcher-generated posts with different valence and social context (identified via `Post_sub1` and Group condition variables in `User_sub1`). Assess how daily consumption changes after such exposure, and whether this effect is moderated by group closeness and group condition (from `User_sub1` and pre-survey measures).
+
+**Step 5** Including descriptive norms and group closeness (for Kainan and Xiaoya) Descriptive norms and perceived group closeness stem from the pre-survey tables: `PreSurvey_sub2` provides user-level norms (e.g., perceived typical drinking in the group). `PreSurvey_sub1`, in its long format (`UserID`\*`Member`), can be summarised within each `Group_nr` to create closeness or norm scores at the group level. These derived norm/closeness indicators are then merged back into either: the user-level data set (`User_sub2` + `User_sub1` + `PreSurvey_sub2`), or the user-week/day panels (when we want norms/closeness as moderators of time-varying exposure–outcome relationships). This structure allows: Kainan to relate descriptive norms and group closeness to levels of alcohol use (using `WeekData_tidy` or `DayData_tidy` as outcomes). Xiaoya to examine whether the impact of experimental posts (by group condition) on daily alcohol consumption is moderated by how close participants are within their groups.
+
 # 5 Description
+
+The scope of the data after cleaning is more organized than the raw data, and the principles that were violated have been resolved. The data sets `Comment.csv`, `DayTidy.csv`, `Like.csv`, `Login.csv`, and `Weekdata.csv` are now clean, with necessary NAs removed and violations fixed. The table `Post.csv` has been split into `Post_sub1` and `Post_sub2`, just like `PreSurvey`, which has been split into `PreSurvey_sub1` and `PreSurvey_sub2`. Also, `User` has been divided into two tibbles, namely `User_sub1` and `User_sub2`.
+
+Some data sets are related to posts and include `PostID` in the primary key, such as `Comment_tidy`, `Like_tidy`, `Post_sub1`, and `Post_sub2`. The `PostID` refers to the post. In `Like_tidy` and `Comment_tidy`, there is more information about interaction data.  
+
+Other data sets are more user-focused and include the variable `UserID` in the primary key, such as `Login`, `PreSurvey_sub1`, `PreSurvey_sub2`, and `User_sub2`. `User_sub1` and `User_sub2` contain information about the users, including `UserID`, `UserRole`, group number, and `Condition`. The `PreSurvey_sub` data sets contain demographic characteristics, such as `Age`, `Gender`, `Education`, `Nationality`, and group-related features. This data set also includes psychological and behavioral measures, such as the Big5 and loneliness items.
+
+Additionally, there is time-sensitive data in `DayData_tidy` and `WeekData_tidy`. In `DayData_tidy`, daily activities are measured, such as alcohol consumption, sports, and snack frequency, while `WeekData_tidy` contains weekly surveys, including attitudes towards alcohol, snacks, and sports, and how often the app was used.
+
+So, in general, we can say that part of the data set is about posts, and the other part is about users. The data comes from 2018 and was collected during the months of March and April.
