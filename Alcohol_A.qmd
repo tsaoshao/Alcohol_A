@@ -10,7 +10,9 @@ editor: visual
 
 # 1 Introduction {#introduction}
 
-In this report, we are going to present the process and rationale of our data tidying process of the data set `AlcoholData`, in terms of how the four data tidy principles were applied, how the relations and primary keys of each tibble were found and checked, and the way we joined the tidied tibbles. All data tidying and report writing were done in R studio version 2025.09.2+418.
+This report documents the data tidying workflow applied to the `AlcoholData` multi-table data set using the `R` programming language and the `tidyverse` suite. Following the tidy data principles, we systematically imported, explored, and cleaned eight source files to ensure each table possesses a clear case type and valid primary keys. We detail the steps taken to identify and remove duplicates, resolve missing values, and structure tables for analysis and downstream visualisation. All code and procedures were executed in `R` with reproducible scripts, and results are presented using interactive tables for clarity.
+
+This project is a joint effort by Kainan Sun, Maartje Bakker, Wenyuan Yang, and Xiaoya Yang.
 
 # 2 Data Tidying {#data-tidying}
 
@@ -37,7 +39,7 @@ User <- read_csv("AlcoholData/User.csv")
 WeekData <- read_csv("AlcoholData/WeekData.csv")
 ```
 
-## 2.2 Principle 1: Each type of case must have its own tibble
+## 2.2 Principle 1: Each Type of Case Must Have Its Own Tibble
 
 ### 2.2.1 Comment.csv
 
@@ -387,7 +389,7 @@ htmltools::div(
 
 ### 2.2.5 Post.csv
 
-We checked for the possible type of cases in `Post.csv`. `ViewerID` was found not belong to the type of case of "post" (as it is an attribute of a viewer rather than a post), which means principle 1 was violated. 
+We checked for the possible type of cases in `Post.csv`. `ViewerID` was found not belong to the type of case of "post" (as it is an attribute of a viewer rather than a post), which means principle 1 was violated.
 
 ```{r results='hide'}
 # Check for violation (multiple views per post)
@@ -399,7 +401,7 @@ Post |>
 
 In the missing value check, we found a missing value in the `ViewerID` column. To keep most meaningful information in that observation, we only removed the missing `ViewerID` when creating a new tibble for `PostID`\*`ViewerID`.
 
-```{r}
+```{r results='hide'}
 # Check for missing values in primary key columns
 Post |> 
   filter(is.na(PostID) | is.na(ViewerID))
@@ -457,7 +459,7 @@ Now for `Post_sub1`, each row is a unique post and its attributes; for `Post_sub
 
 ### 2.2.6 Presurvey.csv
 
-According to Principle 1, each type of case should have its own tibble. We first check the primary key to see whether different case types can be detected directly from the raw data. In this data set, the primary key `UserID` does not reveal any structural differences, so we rely on inspecting the variables themselves. Based on that, we identify two distinct types of cases: group-member information and user-level information. We therefore split the data set into two tibbles before continuing with the tidying process.
+According to principle 1, each type of case should have its own tibble. We first check the primary key to see whether different case types can be detected directly from the raw data. In this data set, the primary key `UserID` does not reveal any structural differences, so we rely on inspecting the variables themselves. Based on that, we identify two distinct types of cases: group-member information and user-level information. We therefore split the data set into two tibbles before continuing with the tidying process.
 
 **Check the primary key**
 
@@ -520,7 +522,7 @@ PreSurvey |>
 This step checks whether any rows have a missing `UserID`. A primary key cannot contain missing values, so this helps confirm that all cases are properly identified before we continue with further tidying.
 
 ::: callout-important
-Although checking the primary key in the raw data does not reveal different types of cases, applying Principle 2 later will change the row structure through pivoting, which in turn alters the primary key and exposes distinct case types. To keep the workflow cleaner and avoid unnecessary complexity after pivoting, we identify these case types in advance and split the data set before further tidying.
+Although checking the primary key in the raw data does not reveal different types of cases, applying principle 2 later will change the row structure through pivoting, which in turn alters the primary key and exposes distinct case types. To keep the workflow cleaner and avoid unnecessary complexity after pivoting, we identify these case types in advance and split the data set before further tidying.
 :::
 
 **Select related columns based on type of case (1)**
@@ -532,7 +534,7 @@ PreSurvey_sub1 <- PreSurvey |>  select(
 )
 ```
 
-Since the primary key didn’t tell us anything about different case types, we looked directly at the variables themselves. From their structure, we could clearly see that the data set mixes group-member information with user-level information. Based on this distinction, and following Principle 1, we separated the group-member variables into `PreSurvey_sub1`.
+Since the primary key didn’t tell us anything about different case types, we looked directly at the variables themselves. From their structure, we could clearly see that the data set mixes group-member information with user-level information. Based on this distinction, and following principle 1, we separated the group-member variables into `PreSurvey_sub1`.
 
 ```{r echo=FALSE}
 htmltools::div(
@@ -643,7 +645,7 @@ User |>
 ```
 
 | Case type | Variables | Notes | Separate tibble? |
-|------------------|------------------|------------------|------------------|
+|----|----|----|----|
 | User | ID_nr_Vragenlijst, Group_nr, Condition | student characteristics mix with relevant group group characteristics | yes |
 | Group | Condition | Fixed group characteristics | yes |
 
@@ -700,6 +702,31 @@ htmltools::div(
   )
 )
 ```
+
+**Check primary key for `User_sub1`**
+
+```{r}
+User_sub1 |> 
+  filter(is.na(Group_nr))
+```
+
+In the initial `Group` table, there was one row with `Group_nr = NA` and `Condition = NA`. Since `Group_nr` is the primary key of the `Group` table, it must not contain missing values. The NA row does not correspond to a real group (it originates from users without group membership), so it was removed from the `Group` table.
+
+**Remove missing value from `User_sub1` table**
+
+```{r}
+User_sub1 <- User_sub1 |> 
+  filter(!is.na(Group_nr))
+```
+
+**Check primary key for `User_sub2` table**
+
+```{r}
+User_sub2 |> 
+  filter(is.na(UserID))
+```
+
+`Group_nr` is a foreign key that links participants to groups. Missing values in `Group_nr` and `ID_nr_Vragenlijst` occur only for `admin` and `special` users, who did not complete the questionnaire and are not assigned to any group. Therefore, these NA values are allowed and are not treated as data errors.
 
 ### 2.2.8 WeekData.csv
 
@@ -802,11 +829,11 @@ WeekData_tidy |>
 
 ```
 
-## 2.3 Principle 2: Each observation must have its own row
+## 2.3 Principle 2: Each Observation Must Have Its Own Row
 
 ### 2.3.1 Example 1: PreSurvey_sub1
 
-According to Principle 2, each observation should appear in its own row. In the `PreSurvey_sub1` tibble, a single row still contained multiple `GroupMember\_` responses from the same user, so several observations were packed together. To address this, we used `pivot_longer()` to pull these member-level variables out into separate rows. After pivoting, each row represents one clear `UserID`\*`Column` observation. We then looked at the new primary key `UserID`\*`Column` to make sure there were no duplicates or missing values.
+According to principle 2, each observation should appear in its own row. In the `PreSurvey_sub1` tibble, a single row still contained multiple `GroupMember\_` responses from the same user, so several observations were packed together. To address this, we used `pivot_longer()` to pull these member-level variables out into separate rows. After pivoting, each row represents one clear `UserID`\*`Column` observation. We then looked at the new primary key `UserID`\*`Column` to make sure there were no duplicates or missing values.
 
 **Pivot GroupMember\_ columns to long format**
 
@@ -896,10 +923,10 @@ PersonDayActivity <- DayData_tidy |>
                  
 ```
 
-At this point, the column names were in the rows, as you would do when addressing principle 2. However, it was still necessary to separate the activity from the `Occ`, `Freq`, and `Soc` values. This was done using the fuction `pivot_longer_delim`.
+At this point, the column names were in the rows, as you would do when addressing principle 2. However, it was still necessary to separate the activity from the `Occ`, `Freq`, and `Soc` values. This was done using the function `separate_wider_delim()`.
 
 ```{r results='hide'}
-#seperating the activity from the measurement.
+#Separating the activity from the measurement.
 PersonDayActivity <- PersonDayActivity |>  
   separate_wider_delim(
   cols = Activity,
@@ -921,7 +948,20 @@ This resulted in the following `PersonDayAcitcity` table. Note that an NA always
 htmltools::div(
   style = "zoom: 0.8;",
   datatable(PersonDayActivity |> 
-    select(UserID, day_nr, Activity, Occ, Freq, Soc)))
+    select(UserID, day_nr, Activity, Occ, Freq, Soc)),
+  options = list(
+    columnDefs = list(
+      list(
+        targets = "_all",
+        render = JS("
+          function(data) {
+            return data === null ? 'NA' : data;
+          }
+        ")
+        )
+      )
+    )
+  )
 ```
 
 The problem is that the `Activity` column at this moment contains values that actually represent separate variables or columns. Because of this, this exploration remains only an exploratory step, and we will not use this approach of trying to turn the rows into separate observations in the tidied data set. However, it does show how a potential violation of principle 2 could have been resolved, although this was not actually the case.
@@ -944,11 +984,11 @@ DayData_tidy <- DayData_tidy |>
   )
 ```
 
-## 2.4 Principle 3: Each variable must have its own column
+## 2.4 Principle 3: Each Variable Must Have Its Own Column
 
 **Example: PreSurvey_sub1**
 
-According to Principle 3, each variable should have its own column. After pivoting to long format, the `PreSurvey_sub1` tibble still mixed different pieces of information: the `Column` column combined both the member index and the variable name, and the `Value` column combined different type of responses. To resolve this, we split the encoded column names into separate components and pivoted the table wider again. After this, each variable has its own column, and the tibble meets the requirement of Principle 3.
+According to principle 3, each variable should have its own column. After pivoting to long format, the `PreSurvey_sub1` tibble still mixed different pieces of information: the `Column` column combined both the member index and the variable name, and the `Value` column combined different type of responses. To resolve this, we split the encoded column names into separate components and pivoted the table wider again. After this, each variable has its own column, and the tibble meets the requirement of principle 3.
 
 **Split the encoded column names**
 
@@ -1032,7 +1072,7 @@ PreSurvey_sub1 <- PreSurvey_sub1 |>
   arrange(UserID, Member)
 ```
 
-After cleaning the variable components, we reshape the tibble back into a wide format using `pivot_wider()`. This spreads each variable into its own column, with `UserID` and `Member` defining each observation. Finally, we sort the rows for clarity so the structure aligns with Principle 3.
+After cleaning the variable components, we reshape the tibble back into a wide format using `pivot_wider()`. This spreads each variable into its own column, with `UserID` and `Member` defining each observation. Finally, we sort the rows for clarity so the structure aligns with principle 3.
 
 ```{r echo=FALSE}
 htmltools::div(
@@ -1103,7 +1143,7 @@ htmltools::div(
 )
 ```
 
-## 2.5 Principle 4: Each value must have its own cell
+## 2.5 Principle 4: Each Value Must Have Its Own Cell
 
 ### 2.5.1 Example 1: PreSurvey_sub2
 
@@ -1179,9 +1219,9 @@ htmltools::div(
 )
 ```
 
-# 3 Table contents and relation
+# 3 Table Contents and Relation
 
-## 3.1 Primary key and foreign key
+## 3.1 Primary Key
 
 **Comment.csv**
 
@@ -1227,8 +1267,121 @@ Post_sub2 |>
 
 ```{r}
 User_sub1 |> 
-  filter(is.na(Group_nr))
+  filter(is.na(Group_nr)) |> 
+  count(Group_nr) |> 
+  filter(n > 1)
 ```
+
+**User_sub2**
+
+```{r}
+User_sub2 |> 
+  count(UserID) |> 
+  filter(n > 1)
+```
+
+## 3.2 Check for Foreign Key by Detecting Shared Columns
+
+3.2.1 Post-related foreign keys
+
+```{r}
+Comment_tidy |> anti_join(Post_sub1, by = "PostID")
+```
+
+```{r}
+Like_tidy |> anti_join(Post_sub1, by = "PostID" )
+```
+
+```{r}
+Post_sub2 |>
+  anti_join(Post_sub1, by = "PostID")
+```
+
+3.2.2 User-related foreign keys
+
+```{r}
+Comment_tidy |>
+  anti_join(User_sub2, by = c("CommenterID" = "UserID"))
+```
+
+```{r}
+Like_tidy |>
+  anti_join(User_sub2, by = c("LikerID" = "UserID"))
+```
+
+```{r}
+Post_sub2 |>
+  anti_join(User_sub2, by = c("ViewerID" = "UserID"))
+```
+
+```{r}
+Login |>
+  anti_join(User_sub2, by = "UserID")
+```
+
+```{r}
+PreSurvey_sub1 |> anti_join(User_sub2, by = "UserID" )
+PreSurvey_sub2 |> anti_join(User_sub2, by = "UserID" )
+```
+
+```{r}
+DayData |>
+  filter(!is.na(UserID)) |> 
+  anti_join(User_sub2, by = "UserID")
+```
+
+```{r}
+WeekData |>
+  anti_join(User_sub2, by = "UserID")
+```
+
+3.2.3 Group membership foreign key
+
+```{r}
+User_sub2 |>
+  filter(!is.na(Group_nr)) |> 
+  anti_join(User_sub1, by = "Group_nr")
+```
+
++-------------------+----------------------------------+---------------------------------+
+| Tables            | Primary Keys                     | Foreign Keys –\> Table          |
++===================+==================================+=================================+
+| Comment_tidy      | PostID, CommenterID, CommentTime | PostID –-\>Post_sub1            |
+|                   |                                  |                                 |
+|                   |                                  | CommenterID=UserID –\>User_sub2 |
++-------------------+----------------------------------+---------------------------------+
+| DayData_tidy      | UserID, day_nr                   | UserID –\> User_sub2            |
++-------------------+----------------------------------+---------------------------------+
+| Like_tidy         | PostID, LikerID                  | PostID –-\>Post_sub1            |
+|                   |                                  |                                 |
+|                   |                                  | LikerID=UserID –\>User_sub2     |
++-------------------+----------------------------------+---------------------------------+
+| Login             | UserID, User_LoginTime           | UserID –-\> User_sub2           |
+|                   |                                  |                                 |
+|                   |                                  | UserID –\> User_sub2            |
++-------------------+----------------------------------+---------------------------------+
+| Post_sub1         | PostID                           | NA                              |
++-------------------+----------------------------------+---------------------------------+
+| Post_sub2         | PostID, ViewerID                 | PostID –\> Post_sub1            |
+|                   |                                  |                                 |
+|                   |                                  | ViewerID=UserID –\>User_sub2    |
++-------------------+----------------------------------+---------------------------------+
+| PreSurvey_sub1    | UserID, Member                   | UserID –\> User_sub2            |
++-------------------+----------------------------------+---------------------------------+
+| PreSurvey_sub2    | UserID                           | UserID –\> User_sub2            |
++-------------------+----------------------------------+---------------------------------+
+| User_sub1 (Group) | Group_nr                         | NA                              |
++-------------------+----------------------------------+---------------------------------+
+| User_sub2 (User)  | UserID                           | Group_nr –\> User_sub1          |
++-------------------+----------------------------------+---------------------------------+
+| WeekData_tidy     | UserID, week_nr                  | UserID –\> User_sub2            |
++-------------------+----------------------------------+---------------------------------+
+
+::: callout-note
+`User_sub1` contains a unique row per experimental group and is identified by the primary key `Group_nr`. Since this table does not reference any other entity, it does not contain foreign keys.
+
+Instead, `Group_nr` functions as a referenced primary key: it is used as a foreign key in the `Users` table to link each participant to the group they were assigned to.
+:::
 
 # 4 Data Joins
 
