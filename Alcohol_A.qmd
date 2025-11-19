@@ -1227,11 +1227,12 @@ htmltools::div(
 
 ## 3.1 Primary Key
 
-Before detecting table relations by foreign key, we checked uniqueness for primary keys in each tidied tibbles.
+To confirm each table has a valid primary key, we check that every key value combination uniquely identifies each row. Code below counts rows per putative key and filters for duplicates. Absence of output for these checks means the primary key is properly defined for the tibble.
 
 **Comment_tidy**
 
 ```{r}
+# Check that each (PostID, CommentTime, CommenterID) triple is unique in Comment_tidy
 Comment_tidy |> 
   count(PostID, CommentTime, CommenterID) |> 
   filter(n > 1)
@@ -1240,6 +1241,7 @@ Comment_tidy |>
 **DayData_tidy**
 
 ```{r}
+# Check uniqueness of each (UserID, day_nr) pair in DayData_tidy
 DayData_tidy |> 
   count(UserID, day_nr) |> 
   filter(n > 1)
@@ -1248,6 +1250,7 @@ DayData_tidy |>
 **Like_tidy**
 
 ```{r}
+# Check uniqueness of each (PostID, LikerID) pair in Like_tidy
 Like_tidy |> 
   count(PostID, LikerID) |> 
   filter(n > 1)
@@ -1256,6 +1259,7 @@ Like_tidy |>
 **Login**
 
 ```{r}
+# Check uniqueness of each (UserID, User_LoginTime) pair in Login
 Login |> 
   count(UserID, User_LoginTime) |> 
   filter(n > 1)
@@ -1264,6 +1268,7 @@ Login |>
 **Post_sub1**
 
 ```{r}
+# Check uniqueness of PostID in Post_sub1
 Post_sub1 |> 
   count(PostID) |> 
   filter(n > 1)
@@ -1272,6 +1277,7 @@ Post_sub1 |>
 **Post_sub2**
 
 ```{r}
+# Check uniqueness of (PostID, ViewerID) pair in Post_sub2
 Post_sub2 |> 
   count(PostID, ViewerID) |> 
   filter(n > 1)
@@ -1280,6 +1286,7 @@ Post_sub2 |>
 **PreSurvey_sub1**
 
 ```{r}
+# Check uniqueness of (UserID, Member) pair in PreSurvey_sub1
 PreSurvey_sub1 |> 
   count(UserID, Member) |> 
   filter(n > 1)
@@ -1288,6 +1295,7 @@ PreSurvey_sub1 |>
 **PreSurvey_sub2**
 
 ```{r}
+# Check uniqueness of UserID in PreSurvey_sub2
 PreSurvey_sub2 |> 
   count(UserID) |> 
   filter(n > 1)
@@ -1296,6 +1304,7 @@ PreSurvey_sub2 |>
 **User_sub1**
 
 ```{r}
+# Check uniqueness of Group_nr in User_sub1
 User_sub1 |> 
   count(Group_nr) |> 
   filter(n > 1)
@@ -1304,6 +1313,7 @@ User_sub1 |>
 **User_sub2**
 
 ```{r}
+# Check uniqueness of UserID in User_sub2
 User_sub2 |> 
   count(UserID) |> 
   filter(n > 1)
@@ -1312,66 +1322,86 @@ User_sub2 |>
 **WeekData_tidy**
 
 ```{r}
+# Check uniqueness of (UserID, week_nr) pair in WeekData_tidy
 WeekData_tidy |> 
   count(UserID, week_nr) |> 
   filter(n > 1)
 ```
 
+All tidied tables were confirmed to have well-defined primary keys if no output was generated for these checks (i.e., no duplicate key sets).
+
 ## 3.2 Check for Foreign Key by Detecting Shared Columns
+
+For each candidate foreign key, we verified referential integrity: every foreign key value should exist in its referenced table. This is done using `anti_join()`, which returns unmatched values (i.e., potential data integrity violations). Where relevant, a mapping between the key names is specified.
 
 ### 3.2.1 Post-related Foreign Keys
 
 ```{r}
+# Ensure all PostID values in Comment_tidy have a corresponding PostID in Post_sub1
 Comment_tidy |> anti_join(Post_sub1, by = "PostID")
 ```
 
 ```{r}
+# Ensure all PostID values in Like_tidy have a corresponding PostID in Post_sub1
 Like_tidy |> anti_join(Post_sub1, by = "PostID" )
 ```
 
 ```{r}
+# Ensure all PostID values in Post_sub2 have a corresponding PostID in Post_sub1
 Post_sub2 |>
   anti_join(Post_sub1, by = "PostID")
 ```
 
+These `anti_join()` results are empty, which means every post-related foreign key is valid (i.e., all post references in `Comment_tidy`, `Like_tidy`, and `Post_sub2` tables exist in the master post table).
+
 ### 3.2.2 User-related Foreign Keys
 
 ```{r}
+# Ensure all CommenterID in Comment_tidy correspond to a UserID in User_sub2
 Comment_tidy |>
   anti_join(User_sub2, by = c("CommenterID" = "UserID"))
 ```
 
 ```{r}
+# Ensure all LikerID in Like_tidy correspond to a UserID in User_sub2
 Like_tidy |>
   anti_join(User_sub2, by = c("LikerID" = "UserID"))
 ```
 
 ```{r}
+# Ensure all ViewerID in Post_sub2 correspond to a UserID in User_sub2
 Post_sub2 |>
   anti_join(User_sub2, by = c("ViewerID" = "UserID"))
 ```
 
 ```{r}
+# Ensure all UserID in Login correspond to a UserID in User_sub2
 Login |>
   anti_join(User_sub2, by = "UserID")
 ```
 
 ```{r}
+# Ensure all UserID in PreSurvey_sub1 and PreSurvey_sub2 correspond to UserID in User_sub2
 PreSurvey_sub1 |> anti_join(User_sub2, by = "UserID" )
 PreSurvey_sub2 |> anti_join(User_sub2, by = "UserID" )
 ```
 
 ```{r}
-DayData_tidy |>
-  anti_join(User_sub2, by = "UserID")
+# Ensure all UserID in DayData_tidy correspond to UserID in User_sub2
+DayData_tidy |> anti_join(User_sub2, by = "UserID")
 ```
 
 ```{r}
+# Ensure all UserID in WeekData_tidy correspond to UserID in User_sub2
 WeekData_tidy |>
   anti_join(User_sub2, by = "UserID")
 ```
 
+The empty output for each `anti_join()` check means every foreign user reference is valid (i.e., all relevant tables only reference existing users).
+
 ### 3.2.3 Group-membership-related Foreign Key
+
+All group membership assignments in `User_sub2` map to existing groups in `User_sub1`.
 
 ```{r}
 User_sub2 |>
@@ -1379,81 +1409,36 @@ User_sub2 |>
   anti_join(User_sub1, by = "Group_nr")
 ```
 
-+-------------------+----------------------------------+---------------------------------+
-| Tables            | Primary Keys                     | Foreign Keys –\> Table          |
-+===================+==================================+=================================+
-| Comment_tidy      | PostID, CommenterID, CommentTime | PostID –-\>Post_sub1            |
-|                   |                                  |                                 |
-|                   |                                  | CommenterID=UserID –\>User_sub2 |
-+-------------------+----------------------------------+---------------------------------+
-| DayData_tidy      | UserID, day_nr                   | UserID –\> User_sub2            |
-+-------------------+----------------------------------+---------------------------------+
-| Like_tidy         | PostID, LikerID                  | PostID –-\>Post_sub1            |
-|                   |                                  |                                 |
-|                   |                                  | LikerID=UserID –\>User_sub2     |
-+-------------------+----------------------------------+---------------------------------+
-| Login             | UserID, User_LoginTime           | UserID –-\> User_sub2           |
-|                   |                                  |                                 |
-|                   |                                  | UserID –\> User_sub2            |
-+-------------------+----------------------------------+---------------------------------+
-| Post_sub1         | PostID                           | NA                              |
-+-------------------+----------------------------------+---------------------------------+
-| Post_sub2         | PostID, ViewerID                 | PostID –\> Post_sub1            |
-|                   |                                  |                                 |
-|                   |                                  | ViewerID=UserID –\>User_sub2    |
-+-------------------+----------------------------------+---------------------------------+
-| PreSurvey_sub1    | UserID, Member                   | UserID –\> User_sub2            |
-+-------------------+----------------------------------+---------------------------------+
-| PreSurvey_sub2    | UserID                           | UserID –\> User_sub2            |
-+-------------------+----------------------------------+---------------------------------+
-| User_sub1 (Group) | Group_nr                         | NA                              |
-+-------------------+----------------------------------+---------------------------------+
-| User_sub2 (User)  | UserID                           | Group_nr –\> User_sub1          |
-+-------------------+----------------------------------+---------------------------------+
-| WeekData_tidy     | UserID, week_nr                  | UserID –\> User_sub2            |
-+-------------------+----------------------------------+---------------------------------+
+Table relation is shown in the following table.
 
-```{r echo=FALSE}
-# After installing the DiagrammeR package, load it.
-DiagrammeR::grViz("
-digraph database {
-graph [
-rankdir = 'LR'
-];
-node [
-fontsize = '16'
-shape = 'ellipse'
-];
-edge [
-];
-'node1' [
-label = 'Student | <f1> student | <f2> neighbourhood | age | sex |smoking_at_home | smoking_parents | smoking_siblings'
-shape = 'record'
-];
-'node2' [
-label = 'Neighbourhood | <f1> neighbourhood | schooldist | hoodname'
-shape = 'record'
-];
-'node3' [
-label = 'StudentBestfriend | <f1> student | bestfriend | from | to'
-shape = 'record'
-];
-'node4' [
-label = 'StudentWave | <f1> student | <f2> wave | alcohol | cannabis | money | romantic'
-shape = 'record'
-];
-'node5' [
-label = 'StudentWaveFriend | <f1> student | <f2>wave | friend'
-shape = 'record'
-];
-'node2':f1 -> 'node1':f2;
-'node1':f1 -> 'node3':f1;
-'node1':f1 -> 'node4':f1;
-'node1':f1 -> 'node5':f1;
-'node4':f2 -> 'node5':f2;
-}
-")
-```
++-------------------+----------------------------------+--------------------+--------------+
+| Table             | Primary Key                      | Foreign Key        | Join Table   |
++===================+==================================+====================+==============+
+| Comment_tidy      | PostID, CommenterID, CommentTime | PostID\            | Post_sub1\   |
+|                   |                                  | CommenterID=UserID | User_sub2    |
++-------------------+----------------------------------+--------------------+--------------+
+| DayData_tidy      | UserID, day_nr                   | UserID             | User_sub2    |
++-------------------+----------------------------------+--------------------+--------------+
+| Like_tidy         | PostID, LikerID                  | PostID\            | Post_sub1\   |
+|                   |                                  | LikerID=UserID     | User_sub2    |
++-------------------+----------------------------------+--------------------+--------------+
+| Login             | UserID, User_LoginTime           | UserID             | User_sub2    |
++-------------------+----------------------------------+--------------------+--------------+
+| Post_sub1         | PostID                           | NA                 | NA           |
++-------------------+----------------------------------+--------------------+--------------+
+| Post_sub2         | PostID, ViewerID                 | PostID\            | Post_sub1\   |
+|                   |                                  | ViewerID=UserID    | User_sub2    |
++-------------------+----------------------------------+--------------------+--------------+
+| PreSurvey_sub1    | UserID, Member                   | UserID             | User_sub2    |
++-------------------+----------------------------------+--------------------+--------------+
+| PreSurvey_sub2    | UserID                           | UserID             | User_sub2    |
++-------------------+----------------------------------+--------------------+--------------+
+| User_sub1 (Group) | Group_nr                         | NA                 | NA           |
++-------------------+----------------------------------+--------------------+--------------+
+| User_sub2 (User)  | UserID                           | Group_nr           | User_sub1    |
++-------------------+----------------------------------+--------------------+--------------+
+| WeekData_tidy     | UserID, week_nr                  | UserID             | User_sub2    |
++-------------------+----------------------------------+--------------------+--------------+
 
 ::: callout-note
 `User_sub1` contains a unique row per experimental group and is identified by the primary key `Group_nr`. Since this table does not reference any other entity, it does not contain foreign keys.
